@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gold Cash CRM</title>
+  <meta name="description" content="Real-time Gold Cash Leads & Conversations CRM Panel">
+
+  <!-- Google Fonts: Inter & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+    rel="stylesheet">
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="goldCash-logo.svg">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <!-- Full Screen Authentication / Login Overlay -->
+  <div class="auth-overlay" id="authOverlay" style="display: flex;">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo-wrap">
+          <img src="goldCash-logo.svg" alt="Gold Cash Logo" class="auth-logo-img">
+        </div>
+        <h2>Gold Cash CRM</h2>
+        <p>Sign in to access your CRM workspace & leads</p>
+      </div>
+
+      <div class="auth-alert-error" id="loginErrorAlert" style="display: none;"></div>
+
+      <form id="loginForm" class="auth-form">
+        <div class="form-group">
+          <label for="loginEmail">Email Address</label>
+          <div class="input-with-icon">
+            <i class="fa-regular fa-envelope input-icon"></i>
+            <input type="email" id="loginEmail" placeholder="admin@goldcash.com" required autocomplete="email">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <div class="input-with-icon">
+            <i class="fa-solid fa-lock input-icon"></i>
+            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+            <button type="button" class="btn-toggle-password" id="togglePasswordBtn" title="Toggle password visibility">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-auth-submit" id="loginSubmitBtn">
+          Sign In to CRM <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="crm-app-layout app-container" style="display: none;">
+    <!-- 1. LEFT NAVIGATION SIDEBAR -->
+    <aside class="nav-sidebar">
+      <div class="nav-brand-header">
+        <div class="brand-logo-card">
+          <div class="brand-logo-glow"></div>
+          <img src="goldCash-logo.svg" alt="Gold Cash Logo" class="brand-logo-img">
+        </div>
+        <div class="brand-text">
+          <h2 class="brand-name">Gold Cash</h2>
+          <span class="brand-tagline">CRM Panel</span>
+        </div>
+      </div>
+
+      <div class="nav-menu-group">
+        <div class="nav-menu-label">MENU</div>
+
+        <!-- LEADS (ON TOP) -->
+        <button class="nav-menu-item active" id="navItemLeads" data-view="leads">
+          <div class="nav-item-icon"><i class="fa-solid fa-users-line"></i></div>
+          <span class="nav-item-text">Leads</span>
+          <span class="nav-badge badge-leads" id="navLeadsCount">0</span>
+        </button>
+
+        <!-- CONVERSATIONS (BELOW LEADS) -->
+        <button class="nav-menu-item" id="navItemConversations" data-view="conversations">
+          <div class="nav-item-icon"><i class="fa-regular fa-comments"></i></div>
+          <span class="nav-item-text">Conversations</span>
+          <span class="nav-badge badge-conversations" id="navConversationsCount">0</span>
+        </button>
+
+        <!-- ACTIVITY LOGS (BELOW CONVERSATIONS) -->
+        <button class="nav-menu-item" id="navItemLogs" data-view="logs">
+          <div class="nav-item-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+          <span class="nav-item-text">Logs</span>
+        </button>
+
+        <!-- TEAM MANAGEMENT -->
+        <button class="nav-menu-item" id="openTeamModalBtn" title="Manage Sub-Users & Team">
+          <div class="nav-item-icon"><i class="fa-solid fa-users-gear"></i></div>
+          <span class="nav-item-text">Team</span>
+        </button>
+      </div>
+
+      <!-- User Initials Profile / Switcher Footer -->
+      <div class="nav-footer">
+        <div id="userProfileCardWrap" style="width: 100%;">
+          <div class="user-profile-card">
+            <div class="user-avatar-initials">AU</div>
+            <div class="user-info">
+              <span class="user-name">Admin User</span>
+              <span class="user-status"><span class="status-dot"></span> Online</span>
+            </div>
+          </div>
+        </div>
+
+        <button id="configBtn" class="nav-config-btn" title="Firebase Settings" style="display: none;">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- 2. MAIN APP CONTENT CONTAINER -->
+    <main class="app-main-content">
+
+      <!-- VIEW 1: LEADS DASHBOARD (MATCHING SCREENSHOT 1) -->
+      <section class="view-section" id="leadsViewSection" style="display: flex;">
+        <div class="leads-dashboard-container">
+          <!-- Leads View Top Header -->
+          <div class="view-header">
+            <div class="header-actions" style="margin-left: auto;">
+              <div class="search-input-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="leadsSearchInput" placeholder="Search leads by name, phone or message...">
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Pills -->
+          <div class="leads-filter-bar">
+            <div class="filter-pills">
+              <button class="lead-filter-pill active" data-filter="all">All Leads (<span
+                  id="countAllLeads">0</span>)</button>
+              <button class="lead-filter-pill" data-filter="new">New (<span id="countNewLeads">0</span>)</button>
+              <button class="lead-filter-pill" data-filter="contacted">Contacted (<span
+                  id="countContactedLeads">0</span>)</button>
+              <button class="lead-filter-pill" data-filter="no_answer">No Answer (<span
+                  id="countNoAnswerLeads">0</span>)</button>
+              <button class="lead-filter-pill" data-filter="follow_up">Follow Up (<span
+                  id="countFollowUpLeads">0</span>)</button>
+              <button class="lead-filter-pill" data-filter="converted">Converted (<span
+                  id="countConvertedLeads">0</span>)</button>
+              <button class="lead-filter-pill" data-filter="lost">Lost (<span id="countLostLeads">0</span>)</button>
+              <button class="lead-filter-pill" data-filter="deleted">Deleted (<span
+                  id="countDeletedLeads">0</span>)</button>
+            </div>
+
+            <button id="exportExcelBtn" class="btn-export-excel" title="Export leads to Excel">
+              <i class="fa-solid fa-file-excel"></i> Export to Excel
+            </button>
+          </div>
+
+          <!-- Leads Table Container -->
+          <div class="leads-table-container">
+            <!-- Table Header Row (Matching User Screenshot) -->
+            <div class="leads-table-header">
+              <div class="col-header col-name">Name</div>
+              <div class="col-header col-phone">Phone number</div>
+              <div class="col-header col-query">User Query</div>
+              <div class="col-header col-platform">Platform</div>
+              <div class="col-header col-assignee">Assigned</div>
+              <div class="col-header col-status">Status</div>
+              <div class="col-header col-date">Created Date</div>
+              <div class="col-header col-actions">Action</div>
+            </div>
+
+            <!-- Leads Card Table List -->
+            <div class="leads-list-scroll">
+              <div class="leads-loading-state" id="leadsLoadingState">
+                <div class="spinner"></div>
+                <p>Fetching leads...</p>
+              </div>
+
+              <div class="leads-empty-state" id="leadsEmptyState" style="display: none;">
+                <i class="fa-solid fa-user-group"></i>
+                <h3>No leads found</h3>
+                <p>Incoming customer queries and leads will automatically populate here.</p>
+              </div>
+
+              <div class="leads-cards-list" id="leadsCardsList">
+                <!-- Dynamic lead rows rendered via JavaScript -->
+              </div>
+            </div>
+
+            <!-- Leads Pagination Footer Bar -->
+            <div class="pagination-bar" id="leadsPaginationBar" style="display: flex;">
+              <div class="pagination-info">
+                Showing page <strong id="leadsCurrentPageNum">1</strong> of <strong id="leadsTotalPagesNum">1</strong> (<span id="leadsTotalRecordsNum">0</span> total leads)
+              </div>
+              <div class="pagination-controls">
+                <button type="button" class="btn-page-step" id="leadsPrevBtn" disabled>
+                  <i class="fa-solid fa-chevron-left"></i> Previous
+                </button>
+                <div class="page-numbers-wrap" id="leadsPageNumbers"></div>
+                <button type="button" class="btn-page-step" id="leadsNextBtn" disabled>
+                  Next <i class="fa-solid fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: CONVERSATIONS (2-COLUMN CHAT LAYOUT MATCHING SCREENSHOT 2) -->
+      <section class="view-section" id="conversationsViewSection" style="display: none;">
+
+        <!-- Column 1: Conversations List Pane (Team Inbox) -->
+        <aside class="conversations-pane">
+          <div class="conv-header">
+            <div class="conv-title-row">
+              <h2>Team inbox</h2>
+              <span class="conv-dropdown-icon"><i class="fa-solid fa-chevron-down"></i></span>
+            </div>
+
+            <div class="search-input-wrap small">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="convSearchInput" placeholder="Search conversations...">
+            </div>
+
+            <div class="conv-filter-tabs">
+              <button class="conv-tab active" data-filter="all">All <span id="convAllCount">0</span></button>
+              <button class="conv-tab" data-filter="unread">Unread <span id="convUnreadCount">0</span></button>
+            </div>
+
+            <div class="conv-section-subtitle">
+              <span>Active Inbound</span>
+              <span id="convActiveCount">0 conversations</span>
+            </div>
+          </div>
+
+          <!-- Conversations scroll list -->
+          <div class="conversations-list" id="conversationsList">
+            <!-- Rendered by JS -->
+          </div>
+        </aside>
+
+        <!-- Column 2: Active Chat Window -->
+        <section class="chat-pane" id="chatPane">
+          <!-- Chat Placeholder when no contact is selected -->
+          <div class="chat-placeholder" id="chatPlaceholder">
+            <div class="placeholder-content">
+              <div class="placeholder-icon"><i class="fa-regular fa-comments"></i></div>
+              <h2>Select a Conversation</h2>
+              <p>Choose a lead or contact from the list on the left to start live messaging.</p>
+            </div>
+          </div>
+
+          <!-- Active Chat Interface -->
+          <div class="active-chat-container" id="activeChatView" style="display: none;">
+            <!-- Header -->
+            <div class="chat-header">
+              <!-- Avatar with user initials -->
+              <div class="chat-avatar-wrap">
+                <div class="chat-contact-avatar" id="chatContactAvatar">ML</div>
+              </div>
+
+              <div class="chat-header-info">
+                <div class="name-status-row">
+                  <h3 id="chatContactName">Maya Lin</h3>
+                </div>
+                <div class="phone-id-row">
+                  <span id="chatContactPhone"><i class="fa-solid fa-phone"></i> +91 98765 43210</span>
+                </div>
+              </div>
+
+              <div class="chat-header-actions">
+                <!-- 24-Hour WhatsApp Messaging Window Timer Badge -->
+                <div class="window-timer-badge active" id="chatWindowTimerBadge"
+                  title="24-Hour WhatsApp Messaging Window Status">
+                  <i class="fa-regular fa-clock"></i>
+                  <span id="chatWindowTimerText">24h 00m</span>
+                </div>
+
+                <button id="markReadBtn" class="icon-action-btn" title="Mark as read">
+                  <i class="fa-regular fa-envelope-open"></i>
+                </button>
+                <button id="refreshChatBtn" class="icon-action-btn" title="Refresh messages">
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+                <button id="deleteLeadBtn" class="icon-action-btn delete" title="Delete conversation & lead">
+                  <i class="fa-regular fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Error Banner -->
+            <div class="chat-error-banner" id="chatErrorBanner" style="display: none;">
+              <div class="error-content">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <span id="chatErrorMessage">Failed to send message.</span>
+              </div>
+              <button id="closeErrorBannerBtn" class="close-error-btn">&times;</button>
+            </div>
+
+            <!-- Messages Body -->
+            <div class="chat-messages-body" id="chatMessagesBody">
+              <div class="messages-loading" id="messagesLoading">
+                <div class="spinner"></div>
+                <span>Loading messages...</span>
+              </div>
+
+              <div class="messages-empty-chat" id="messagesEmptyChat" style="display: none;">
+                <i class="fa-regular fa-comments"></i>
+                <p>No messages in this conversation yet.</p>
+              </div>
+
+              <div class="messages-stream" id="messagesStream"></div>
+            </div>
+
+            <!-- Composer Footer -->
+            <footer class="chat-composer-footer">
+              <!-- Staged Attachments Tray -->
+              <div class="composer-attachments-tray" id="composerAttachmentsTray" style="display: none;">
+                <div class="tray-header">
+                  <span class="tray-title"><i class="fa-solid fa-paperclip"></i> Staged Media (<span
+                      id="trayCount">0</span>)</span>
+                  <button type="button" class="tray-clear-all-btn" id="clearAllAttachmentsBtn">Clear all</button>
+                </div>
+                <div class="tray-items-list" id="trayItemsList"></div>
+              </div>
+
+              <!-- 24-Hour Messaging Window Expired Banner -->
+              <div class="window-expired-banner" id="windowExpiredBanner" style="display: none;">
+                <div class="expired-text">
+                  <i class="fa-solid fa-lock"></i>
+                  <span>24-Hour messaging window is closed. Custom messages are disabled by WhatsApp Meta policy. You
+                    must send a Template message to re-open the window.</span>
+                </div>
+                <button type="button" class="btn-use-template" id="useTemplateWindowBtn">
+                  <i class="fa-regular fa-note-sticky"></i> Select Template
+                </button>
+              </div>
+
+              <form id="sendMessageForm" class="message-form">
+                <div class="input-actions-left">
+                  <button type="button" class="composer-icon-btn" title="Quick Templates" id="quickTemplatesBtn">
+                    <i class="fa-regular fa-note-sticky"></i>
+                  </button>
+                  <button type="button" class="composer-icon-btn" title="Attach Media or File" id="attachmentMenuBtn">
+                    <i class="fa-solid fa-paperclip"></i>
+                  </button>
+
+                  <!-- Attachment Popover -->
+                  <div class="attachment-popover" id="attachmentPopover" style="display: none;">
+                    <button type="button" class="attachment-popover-item" id="attachImageFileBtn">
+                      <span class="popover-icon-circle image-circle"><i class="fa-solid fa-image"></i></span>
+                      <div class="popover-item-text">
+                        <strong>Upload Images</strong>
+                        <span>Photos or graphics</span>
+                      </div>
+                    </button>
+                    <button type="button" class="attachment-popover-item" id="attachDocFileBtn">
+                      <span class="popover-icon-circle doc-circle"><i class="fa-solid fa-file-pdf"></i></span>
+                      <div class="popover-item-text">
+                        <strong>Upload PDF Document</strong>
+                        <span>Brochures & catalogs</span>
+                      </div>
+                    </button>
+                    <button type="button" class="attachment-popover-item" id="attachUrlBtn">
+                      <span class="popover-icon-circle url-circle"><i class="fa-solid fa-link"></i></span>
+                      <div class="popover-item-text">
+                        <strong>Attach by URL</strong>
+                        <span>Web links to images/PDFs</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  <input type="file" id="imageFileInput" accept="image/jpeg,image/png,image/webp,image/gif" multiple
+                    style="display: none;">
+                  <input type="file" id="docFileInput" accept=".pdf,application/pdf" style="display: none;">
+                </div>
+
+                <div class="message-input-wrapper">
+                  <textarea id="messageTextInput" class="message-textarea"
+                    placeholder="Type a WhatsApp message... (Enter to send, Shift+Enter for newline)"
+                    rows="1"></textarea>
+                </div>
+
+                <div class="input-actions-right">
+                  <button type="submit" id="sendMessageBtn" class="send-message-btn" title="Send Message">
+                    <i class="fa-solid fa-paper-plane send-icon"></i>
+                    <div class="spinner-small" style="display: none;"></div>
+                    <span>Send</span>
+                  </button>
+                </div>
+              </form>
+            </footer>
+          </div>
+        </section>
+      </section>
+
+      <!-- VIEW 3: ACTIVITY LOGS & AUDIT TRAIL -->
+      <section class="view-section" id="logsViewSection" style="display: none;">
+        <div class="leads-dashboard-container">
+          <!-- View Header -->
+          <div class="view-header">
+            <div class="header-title-wrap">
+              <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-clock-rotate-left" style="color: var(--crm-primary);"></i> Activity & Action Logs
+              </h2>
+              <span class="header-subtitle" style="font-size: 12px; color: var(--text-muted);">Audit log tracking lead status changes, deletions, message sending, and assignee updates</span>
+            </div>
+            <div class="header-actions" style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
+              <div class="search-input-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="logsSearchInput" placeholder="Search logs by action, lead or user...">
+              </div>
+            </div>
+          </div>
+
+          <!-- Logs Table Container -->
+          <div class="leads-table-wrapper">
+            <div class="logs-table-header">
+              <div class="col-log-time">Timestamp</div>
+              <div class="col-log-action">Action</div>
+              <div class="col-log-lead">Target Lead</div>
+              <div class="col-log-performer">Performed By / Assignee</div>
+              <div class="col-log-details">Details</div>
+            </div>
+
+            <div class="logs-list-body" id="logsCardsList">
+              <!-- Rendered dynamically by JavaScript -->
+            </div>
+
+            <!-- Empty State -->
+            <div class="leads-empty-state" id="logsEmptyState" style="display: none;">
+              <div class="empty-icon" style="font-size: 40px; color: #22c55e; margin-bottom: 12px;"><i class="fa-solid fa-clipboard-list"></i></div>
+              <h3 style="font-size: 16px; font-weight: 700; color: var(--text-main);">No Activity Logs Available</h3>
+              <p style="color: #64748b; font-size: 13px; margin-top: 4px; max-width: 480px;">User actions like status updates, lead deletions, and WhatsApp messages will be logged here automatically.</p>
+            </div>
+
+            <!-- Activity Logs Pagination Footer Bar -->
+            <div class="pagination-bar" id="logsPaginationBar" style="display: flex;">
+              <div class="pagination-info">
+                Showing page <strong id="logsCurrentPageNum">1</strong> of <strong id="logsTotalPagesNum">1</strong> (<span id="logsTotalRecordsNum">0</span> total logs)
+              </div>
+              <div class="pagination-controls">
+                <button type="button" class="btn-page-step" id="logsPrevBtn" disabled>
+                  <i class="fa-solid fa-chevron-left"></i> Previous
+                </button>
+                <div class="page-numbers-wrap" id="logsPageNumbers"></div>
+                <button type="button" class="btn-page-step" id="logsNextBtn" disabled>
+                  Next <i class="fa-solid fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Connection Status Overlay Popup -->
+    <div class="modal-overlay" id="connectionModal" style="display: none; z-index: 10000;">
+      <div class="modal-card connection-modal-card">
+        <div class="connection-modal-content">
+          <!-- State 1: Connecting -->
+          <div class="connection-state" id="connectingState" style="display: flex;">
+            <div class="connection-icon-spinner">
+              <i class="fa-solid fa-spinner fa-spin"></i>
+            </div>
+            <h3>Connecting to Firebase</h3>
+            <p>Establishing real-time Firestore database connection...</p>
+          </div>
+
+          <!-- State 2: Connection Failed / Disconnected -->
+          <div class="connection-state" id="connectionFailedState" style="display: none;">
+            <div class="connection-icon-failed">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3>Firebase Connection Failed</h3>
+            <p id="connectionErrorMessage">Unable to connect to Firestore database. Please check your network connection.</p>
+            <div class="connection-modal-actions">
+              <button type="button" class="btn-primary" id="popupRetryBtn" style="padding: 10px 24px; font-weight: 600;">
+                <i class="fa-solid fa-rotate-right"></i> Retry Connection
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Team Sub-Users Management Modal -->
+    <div class="modal-overlay" id="teamManagementModal" style="display: none; z-index: 9999;">
+      <div class="modal-card team-modal-card" style="max-width: 650px; width: 90%;">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <i class="fa-solid fa-users-gear" style="color: #2563eb;"></i>
+            <h3>Team & Sub-Users Management</h3>
+          </div>
+          <button id="closeTeamModalBtn" class="modal-close-btn">&times;</button>
+        </div>
+
+        <div class="modal-body" style="padding: 20px;">
+          <!-- Add New Sub-User Form -->
+          <form id="addTeamMemberForm" style="display: flex; gap: 10px; align-items: flex-end; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 130px;">
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Full Name</label>
+              <input type="text" id="newMemberName" placeholder="e.g. Rahul Sharma" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Email Address</label>
+              <input type="email" id="newMemberEmail" placeholder="rahul@company.com" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
+            </div>
+            <div style="width: 120px;">
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Password</label>
+              <input type="text" id="newMemberPassword" placeholder="e.g. rahul123" required style="width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
+            </div>
+            <div style="width: 100px;">
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Role</label>
+              <select id="newMemberRole" class="custom-form-select">
+                <option value="agent" selected>Agent</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-primary" style="padding: 8px 16px; height: 37px; font-weight: 600;">
+              <i class="fa-solid fa-plus"></i> Add User
+            </button>
+          </form>
+
+          <!-- Team Members List -->
+          <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 12px; color: var(--text-main);">Team Members (<span id="teamMemberCount">0</span>)</h4>
+          <div id="teamMembersListTable" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-overlay" id="configModal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <i class="fa-solid fa-sliders"></i>
+            <h3>Firebase Configuration</h3>
+          </div>
+          <button id="closeModalBtn" class="modal-close-btn">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <p class="modal-desc">
+            Enter your Firebase project credentials. The panel will automatically listen to Firestore <code>leads</code>
+            and <code>leads/{docId}/messages</code> in real time.
+          </p>
+
+          <form id="firebaseConfigForm">
+            <div class="form-group">
+              <label for="cfgApiKey">Firebase API Key</label>
+              <input type="text" id="cfgApiKey" placeholder="AIzaSy..." required>
+            </div>
+
+            <div class="form-group-row">
+              <div class="form-group">
+                <label for="cfgProjectId">Project ID</label>
+                <input type="text" id="cfgProjectId" placeholder="gold-cash-whatsapp" required>
+              </div>
+              <div class="form-group">
+                <label for="cfgAuthDomain">Auth Domain</label>
+                <input type="text" id="cfgAuthDomain" placeholder="gold-cash-whatsapp.firebaseapp.com">
+              </div>
+            </div>
+
+            <div class="form-group-row">
+              <div class="form-group">
+                <label for="cfgStorageBucket">Storage Bucket</label>
+                <input type="text" id="cfgStorageBucket" placeholder="gold-cash-whatsapp.appspot.com">
+              </div>
+              <div class="form-group">
+                <label for="cfgMessagingSenderId">Messaging Sender ID</label>
+                <input type="text" id="cfgMessagingSenderId" placeholder="57988479642">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="cfgAppId">App ID</label>
+              <input type="text" id="cfgAppId" placeholder="1:57988479642:web:...">
+            </div>
+
+            <div class="form-group">
+              <label for="cfgFunctionUrl">Callable Function Name / URL</label>
+              <input type="text" id="cfgFunctionUrl" placeholder="sendWhatsAppMessage">
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" id="resetConfigBtn" class="btn-secondary">Reset Defaults</button>
+              <button type="submit" id="saveConfigBtn" class="btn-primary">Save & Connect</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Media Attachment Input Modal -->
+    <div class="modal-overlay" id="mediaInputModal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <i class="fa-solid fa-photo-film"></i>
+            <h3 id="mediaModalTitle">Attach Media</h3>
+          </div>
+          <button id="closeMediaModalBtn" class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="mediaAttachmentForm">
+            <div class="form-group">
+              <label>Attachment Type</label>
+              <div class="media-type-toggle">
+                <button type="button" class="media-toggle-btn active" data-type="image" id="toggleTypeImage">
+                  <i class="fa-solid fa-image"></i> Image
+                </button>
+                <button type="button" class="media-toggle-btn" data-type="document" id="toggleTypeDoc">
+                  <i class="fa-solid fa-file-pdf"></i> PDF Document
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="mediaUrlInput">Direct Media URL</label>
+              <input type="url" id="mediaUrlInput" placeholder="https://images.unsplash.com/... or https://.../file.pdf"
+                required>
+            </div>
+
+            <div class="form-group" id="mediaFilenameGroup" style="display: none;">
+              <label for="mediaFilenameInput">File Name (with extension)</label>
+              <input type="text" id="mediaFilenameInput" placeholder="e.g., product_quotation_v2.pdf">
+            </div>
+
+            <div class="form-group">
+              <label for="mediaCaptionInput">Caption (Optional)</label>
+              <input type="text" id="mediaCaptionInput" placeholder="Add a caption for this media...">
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" id="cancelMediaModalBtn" class="btn-secondary">Cancel</button>
+              <button type="submit" id="addMediaModalBtn" class="btn-primary">Add Attachment</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lightbox Viewer Modal -->
+    <div class="media-lightbox-overlay" id="imageLightboxModal" style="display: none;">
+      <div class="lightbox-top-bar">
+        <div class="lightbox-title-wrap">
+          <span class="lightbox-counter" id="lightboxCounter">1 / 1</span>
+          <span class="lightbox-caption-inline" id="lightboxInlineTitle">Image Preview</span>
+        </div>
+        <div class="lightbox-actions">
+          <a id="lightboxDownloadBtn" class="lightbox-btn" title="Download Media" download target="_blank"
+            rel="noopener noreferrer">
+            <i class="fa-solid fa-download"></i>
+          </a>
+          <a id="lightboxNewTabBtn" class="lightbox-btn" title="Open in New Tab" target="_blank"
+            rel="noopener noreferrer">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          </a>
+          <button id="lightboxCloseBtn" class="lightbox-btn close-btn" title="Close (Esc)">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="lightbox-body">
+        <button id="lightboxPrevBtn" class="lightbox-nav-btn prev" title="Previous Image (←)">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+
+        <div class="lightbox-stage">
+          <div class="lightbox-img-wrapper" id="lightboxImgWrapper">
+            <img id="lightboxImage" src="" alt="Full view preview">
+          </div>
+          <div class="lightbox-caption-bar" id="lightboxCaption"></div>
+        </div>
+
+        <button id="lightboxNextBtn" class="lightbox-nav-btn next" title="Next Image (→)">
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Export to Excel Modal Popup -->
+    <div class="modal-overlay" id="exportModal" style="display: none;">
+      <div class="modal-card export-modal-card">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <i class="fa-solid fa-file-excel" style="color: #16a34a; font-size: 20px;"></i>
+            <h3 style="font-size: 16px; font-weight: 700; color: var(--text-main);">Export Leads to Excel</h3>
+          </div>
+          <button id="closeExportModalBtn" class="modal-close-btn">&times;</button>
+        </div>
+
+        <div class="modal-body" style="padding: 20px;">
+          <!-- Export Scope Option -->
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label
+              style="font-weight: 600; font-size: 13px; color: var(--text-main); margin-bottom: 8px; display: block;">Select
+              Export Scope:</label>
+            <div class="radio-option-group">
+              <label class="radio-card">
+                <input type="radio" name="exportScope" value="all" checked>
+                <div class="radio-text">
+                  <strong>All Leads</strong>
+                  <span>Export all customer leads in the database</span>
+                </div>
+              </label>
+              <label class="radio-card">
+                <input type="radio" name="exportScope" value="duration">
+                <div class="radio-text">
+                  <strong>Specific Date Duration</strong>
+                  <span>Filter leads generated within a custom date range</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Date Range Inputs (Shown when duration is selected) -->
+          <div id="exportDateRangeFields" class="date-range-fields" style="display: none;">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="exportStartDate">Start Date</label>
+                <input type="date" id="exportStartDate" class="form-input">
+              </div>
+              <div class="form-group flex-1">
+                <label for="exportEndDate">End Date</label>
+                <input type="date" id="exportEndDate" class="form-input">
+              </div>
+            </div>
+          </div>
+
+          <!-- Status Filter Option -->
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="exportStatusSelect"
+              style="font-weight: 600; font-size: 13px; color: var(--text-main); margin-bottom: 6px; display: block;">Filter
+              by Status:</label>
+            <select id="exportStatusSelect" class="form-select">
+              <option value="all">All Active Statuses (Excluding Deleted)</option>
+              <option value="all_with_deleted">All Statuses (Including Deleted)</option>
+              <option value="new">New Only</option>
+              <option value="contacted">Contacted Only</option>
+              <option value="no_answer">No Answer Only</option>
+              <option value="follow_up">Follow Up Only</option>
+              <option value="converted">Converted Only</option>
+              <option value="lost">Lost Only</option>
+              <option value="deleted">Deleted Only</option>
+            </select>
+          </div>
+
+          <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" id="cancelExportBtn" class="btn-secondary">Cancel</button>
+            <button type="button" id="confirmDownloadExcelBtn" class="btn-primary btn-excel">
+              <i class="fa-solid fa-download"></i> Download Excel Sheet
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Lead Confirmation Modal -->
+    <div class="modal-overlay" id="deleteConfirmModal" style="display: none;">
+      <div class="modal-card confirm-modal-card">
+        <div class="modal-header">
+          <div class="modal-title-wrap warning-title">
+            <i class="fa-solid fa-triangle-exclamation" style="color: #ef4444; font-size: 20px;"></i>
+            <h3 style="font-size: 16px; font-weight: 700; color: var(--text-main);">Delete Lead Confirmation</h3>
+          </div>
+          <button id="closeDeleteModalBtn" class="modal-close-btn">&times;</button>
+        </div>
+
+        <div class="modal-body" style="padding: 20px;">
+          <p class="modal-desc"
+            style="font-size: 14px; color: var(--text-main); margin-bottom: 20px; line-height: 1.5;">
+            Are you sure you want to delete this lead? This lead will be moved to the <strong>Deleted</strong> tab.
+          </p>
+
+          <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" id="cancelDeleteModalBtn" class="btn-secondary">Cancel</button>
+            <button type="button" id="confirmDeleteModalBtn" class="btn-danger">
+              <i class="fa-regular fa-trash-can"></i> Move to Deleted
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Templates Popover -->
+    <div class="templates-popover" id="templatesPopover" style="display: none;">
+      <div class="popover-header">
+        <span>Quick Test Replies</span>
+        <button id="closeTemplatesBtn">&times;</button>
+      </div>
+      <div class="templates-list">
+        <button class="template-item" data-text="Hi! Thank you for contacting us. How can I assist you today?">
+          👋 "Hi! Thank you for contacting us. How can I assist you today?"
+        </button>
+        <button class="template-item" data-text="Hello! We have received your inquiry and our team is reviewing it.">
+          ⏱️ "Hello! We have received your inquiry..."
+        </button>
+        <button class="template-item"
+          data-text="Could you please share your requirement details so we can assist you better?">
+          ❓ "Could you please share your requirement details..."
+        </button>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+  <script type="module" src="firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "whatsapp-lead-live-chat-panel",
+  "version": "1.0.0",
+  "description": "Single-page WhatsApp Lead & Live Chat Testing Panel connected to Firebase Firestore and Meta WhatsApp Cloud API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "firebase",
+    "firestore",
+    "realtime-chat",
+    "crm"
+  ],
+  "author": "",
+  "license": "MIT"
+}
