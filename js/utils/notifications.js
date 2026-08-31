@@ -3,7 +3,8 @@
  */
 
 import { elements } from '../dom/elements.js';
-import { escapeHtml } from './formatters.js';
+import { escapeHtml, formatDisplayPhone } from './formatters.js';
+import { global_settings_CRM } from '../constants/global-settings.js';
 
 export function playNotificationPing() {
   try {
@@ -42,7 +43,8 @@ export function showToast(message, type = 'info') {
 }
 
 export function showNewLeadNotificationBanner(lead, onViewClick) {
-  const displayName = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
   const snippet = lead.lastMessage ? lead.lastMessage.substring(0, 50) : 'New customer message received';
 
   const banner = document.createElement('div');
@@ -79,13 +81,14 @@ export function showNewLeadNotificationBanner(lead, onViewClick) {
 export function triggerDesktopNotification(lead, onClick) {
   if (!("Notification" in window)) return;
 
-  const displayName = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
   const snippet = lead.lastMessage || 'New WhatsApp Lead';
 
   if (Notification.permission === "granted") {
     const notif = new Notification(`🔔 New Lead: ${displayName}`, {
       body: snippet,
-      icon: 'goldCash-logo.svg'
+      icon: global_settings_CRM.projectIcon || 'goldCash-logo.svg'
     });
     notif.onclick = () => {
       window.focus();

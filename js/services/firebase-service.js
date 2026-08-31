@@ -2,12 +2,17 @@
  * Firebase Connection & Real-Time Firestore Synchronization Service
  */
 
-import { initializeFirebase, subscribeToLeads, subscribeToActivityLogs, fetchFirstUserMessage } from '../../firebase-config.js';
+import { initializeFirebase, subscribeToLeads, subscribeToActivityLogs, subscribeToUsers, fetchFirstUserMessage } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { DEMO_LEADS } from '../constants/demo-data.js';
 import { playNotificationPing, showNewLeadNotificationBanner, triggerDesktopNotification, showToast } from '../utils/notifications.js';
+import { addLeadNotification, initLeadNotifications } from '../components/notifications-dropdown.js';
 import { saveLogsToLocalStorage, updateLogsBadge } from './logging-service.js';
+import { normalizePhone } from '../utils/formatters.js';
+
+import { syncAllUsersToFirestore, saveTeamMembers } from './user-service.js';
+import { logoutUser } from './auth-service.js';
 
 let connectionTimeoutTimer = null;
 
@@ -40,54 +45,89 @@ export function connectFirebase(renderLeadsView, renderConversationsView, render
     if (state.connectionStatus === 'connecting') {
       console.warn("Firebase connection timed out after 10 seconds.");
       updateConnectionStatus('error');
+      const errEl = document.getElementById('connectionErrorMessage');
+      if (errEl) {
+        errEl.textContent = "Could not reach the database. Please check your internet connection or try again.";
+      }
     }
   }, 10000);
 
   try {
-    const result = initializeFirebase();
-
-    if (result.success) {
-      state.demoMode = false;
-      startLeadsListener(renderLeadsView, renderConversationsView, updateActiveChatHeader, switchView, highlightLeadCard);
-      startLogsListener(renderLogsView);
-    } else {
-      if (connectionTimeoutTimer) clearTimeout(connectionTimeoutTimer);
-      updateConnectionStatus('error');
-      state.demoMode = true;
-      state.leads = [...DEMO_LEADS];
-      if (renderLeadsView) renderLeadsView();
-      if (renderConversationsView) renderConversationsView();
+    const res = initializeFirebase();
+    if (!res || !res.success) {
+      if (connectionTimeoutTimer) {
+        clearTimeout(connectionTimeoutTimer);
+        connectionTimeoutTimer = null;
+      }
+      console.warn("Firebase initialization status:", res);
+      if (res && res.status === 'standby') {
+        updateConnectionStatus('connected');
+      } else {
+        updateConnectionStatus('error');
+        const errEl = document.getElementById('connectionErrorMessage');
+        if (errEl) {
+          errEl.textContent = res?.message || "Failed to initialize connection. Please verify your settings.";
+        }
+      }
+      return;
     }
+
+    startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsView, updateActiveChatHeader, switchView, highlightLeadCard);
   } catch (err) {
-    if (connectionTimeoutTimer) clearTimeout(connectionTimeoutTimer);
+    if (connectionTimeoutTimer) {
+      clearTimeout(connectionTimeoutTimer);
+      connectionTimeoutTimer = null;
+    }
+    console.error("Firebase connection error:", err);
     updateConnectionStatus('error');
   }
 }
 
-export function startLogsListener(renderLogsView) {
+function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsView, updateActiveChatHeader, switchView, highlightLeadCard) {
+  // 1. Subscribe to Team Users collection
+  if (state.unsubscribeUsers) {
+    state.unsubscribeUsers();
+  }
+  state.unsubscribeUsers = subscribeToUsers((users) => {
+    if (users && users.length > 0) {
+      // Sync Firestore users with local team members state
+      state.teamMembers = users;
+      saveTeamMembers(users);
+
+      // Verify currently active user has not been deleted by admin
+      if (state.currentUser && !['super_admin', 'admin'].includes(state.currentUser.role)) {
+        const stillExists = users.some(u => u.id === state.currentUser.id);
+        if (!stillExists) {
+          logoutUser(() => {
+            showToast("Your account has been deleted by an administrator.", "error");
+          });
+        }
+      }
+    }
+  });
+
+  // 2. Subscribe to Activity Logs
   if (state.unsubscribeLogs) {
     state.unsubscribeLogs();
   }
+  state.unsubscribeLogs = subscribeToActivityLogs((firestoreLogs) => {
+    if (firestoreLogs && firestoreLogs.length > 0) {
+      const mergedMap = new Map();
+      (state.logs || []).forEach(l => mergedMap.set(l.id, l));
+      firestoreLogs.forEach(l => mergedMap.set(l.id, l));
 
-  state.unsubscribeLogs = subscribeToActivityLogs(
-    (logsList) => {
-      console.log(`📋 [CRM App] Real-time activity_logs update received (${logsList.length} total entries):`, logsList);
-      state.logs = logsList;
+      const mergedList = Array.from(mergedMap.values()).sort((a, b) => {
+        return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
+      });
+
+      state.logs = mergedList;
       saveLogsToLocalStorage();
       updateLogsBadge();
-      if (state.activeView === 'logs' && renderLogsView) {
-        renderLogsView();
-      }
-    },
-    (err) => {
-      console.warn("Real-time activity_logs listener warning:", err);
+      if (renderLogsView) renderLogsView();
     }
-  );
-}
+  });
 
-export function startLeadsListener(renderLeadsView, renderConversationsView, updateActiveChatHeader, switchView, highlightLeadCard) {
-  if (elements.leadsLoadingState) elements.leadsLoadingState.style.display = 'flex';
-
+  // 3. Subscribe to Real-Time Leads
   if (state.unsubscribeLeads) {
     state.unsubscribeLeads();
   }
@@ -106,13 +146,21 @@ export function startLeadsListener(renderLeadsView, renderConversationsView, upd
       const isInitial = state.isInitialLeadsLoad;
       state.isInitialLeadsLoad = false;
 
+      if (isInitial) {
+        initLeadNotifications(leadsList);
+      }
+
       leadsList.forEach(lead => {
         const isCustomerLead = lead.isLead !== false && lead.initiatedBy !== 'crm';
         const isNewDoc = !state.knownLeadIds.has(lead.id);
+        const lastMsgKey = String(lead.lastMessageAt || lead.lastMessage || lead.updatedAt || '');
+        const prevMsgKey = state.knownLeadMessages ? state.knownLeadMessages.get(lead.id) : null;
+        const hasNewMessage = prevMsgKey !== undefined && prevMsgKey !== null && prevMsgKey !== lastMsgKey && lastMsgKey !== '';
 
-        if (!isInitial && isNewDoc && isCustomerLead) {
-          console.log(`🔔 [Notification] New incoming lead detected from ${lead.name || lead.phone} (${lead.id})`);
+        if (!isInitial && (isNewDoc || hasNewMessage) && isCustomerLead) {
+          console.log(`🔔 [Notification] New incoming lead / message from ${lead.name || lead.phone} (${lead.id})`);
           playNotificationPing();
+          addLeadNotification(lead);
           showNewLeadNotificationBanner(lead, (targetLead) => {
             if (switchView) switchView('leads');
             if (highlightLeadCard) highlightLeadCard(targetLead.id);
@@ -124,9 +172,24 @@ export function startLeadsListener(renderLeadsView, renderConversationsView, upd
         }
 
         state.knownLeadIds.add(lead.id);
+        if (!state.knownLeadMessages) state.knownLeadMessages = new Map();
+        state.knownLeadMessages.set(lead.id, lastMsgKey);
       });
 
-      state.leads = leadsList;
+      const deduplicatedMap = new Map();
+      leadsList.forEach(lead => {
+        const normP = normalizePhone(lead.phone);
+        const key = normP ? `phone_${normP}` : lead.id;
+        if (!deduplicatedMap.has(key)) {
+          deduplicatedMap.set(key, lead);
+        } else {
+          // Merge lead records if same phone exists with different ID format
+          const existing = deduplicatedMap.get(key);
+          deduplicatedMap.set(key, { ...existing, ...lead, name: lead.name || existing.name });
+        }
+      });
+
+      state.leads = Array.from(deduplicatedMap.values());
       if (renderLeadsView) renderLeadsView();
       if (renderConversationsView) renderConversationsView();
 
@@ -154,7 +217,7 @@ export function startLeadsListener(renderLeadsView, renderConversationsView, upd
       console.error("Leads subscription error:", err);
       if (elements.leadsLoadingState) elements.leadsLoadingState.style.display = 'none';
       updateConnectionStatus('error');
-      showToast(`Firestore listener error: ${err.message}`, 'error');
+      showToast(`Database listener error: ${err.message}`, 'error');
     }
   );
 }

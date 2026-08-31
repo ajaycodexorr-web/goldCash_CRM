@@ -15,6 +15,7 @@ import {
   getDocs,
   updateDoc, 
   deleteDoc,
+  arrayUnion,
   serverTimestamp 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { 
@@ -62,7 +63,15 @@ export function getSavedConfig() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        apiKey: (parsed.apiKey && parsed.apiKey.trim()) || DEFAULT_CONFIG.apiKey,
+        projectId: (parsed.projectId && parsed.projectId.trim()) || DEFAULT_CONFIG.projectId,
+        authDomain: (parsed.authDomain && parsed.authDomain.trim()) || DEFAULT_CONFIG.authDomain,
+        storageBucket: (parsed.storageBucket && parsed.storageBucket.trim()) || DEFAULT_CONFIG.storageBucket
+      };
     }
   } catch (err) {
     console.warn("Could not read stored Firebase config:", err);
@@ -88,11 +97,11 @@ export function initializeFirebase(customConfig = null) {
   const config = customConfig || getSavedConfig();
   
   if (!config.apiKey || !config.projectId) {
-    console.info("Firebase credentials incomplete. Panel is in Standby Mode.");
+    console.info("Database credentials incomplete. Panel is in Standby Mode.");
     return {
       success: false,
       status: 'standby',
-      message: 'Awaiting Firebase credentials'
+      message: 'Awaiting Database credentials'
     };
   }
 
@@ -133,7 +142,7 @@ export function initializeFirebase(customConfig = null) {
     return {
       success: true,
       status: 'connected',
-      message: 'Firebase Connected',
+      message: 'Database Connected',
       db,
       functions,
       storage,
@@ -167,24 +176,49 @@ export function subscribeToLeads(onUpdate, onError) {
 
   try {
     const leadsRef = collection(db, 'leads');
-    const q = query(leadsRef, orderBy('lastMessageAt', 'desc'));
 
-    leadsUnsubscribe = onSnapshot(q, (snapshot) => {
+    // Subscribe to all documents in the leads collection without restrictive orderBy filter
+    leadsUnsubscribe = onSnapshot(leadsRef, (snapshot) => {
       const leads = [];
       snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
+        const data = docSnap.data() || {};
+        
+        // Handle Firestore Timestamp conversions
+        const parseTs = (val) => {
+          if (!val) return null;
+          if (val.toDate && typeof val.toDate === 'function') return val.toDate().toISOString();
+          if (typeof val === 'string' || typeof val === 'number') return new Date(val).toISOString();
+          return null;
+        };
+
+        const rawCreated = parseTs(data.createdAt);
+        const rawLastMsgAt = parseTs(data.lastMessageAt);
+        const rawUpdated = parseTs(data.updatedAt);
+        const effectiveTime = rawLastMsgAt || rawCreated || rawUpdated || new Date().toISOString();
+
+        const messageText = data.lastMessage || data.firstMessage || data.query || '';
+
         leads.push({
           id: docSnap.id,
           name: data.name || '',
           phone: data.phone || docSnap.id,
           status: data.status || 'new',
-          lastMessage: data.lastMessage || '',
-          lastMessageAt: data.lastMessageAt || null,
-          unreadCount: typeof data.unreadCount === 'number' ? data.unreadCount : 0,
-          createdAt: data.createdAt || null,
-          updatedAt: data.updatedAt || null,
+          lastMessage: messageText,
+          firstMessage: data.firstMessage || messageText,
+          query: data.query || data.firstMessage || messageText,
+          lastMessageAt: effectiveTime,
+          unreadCount: typeof data.unreadCount === 'number' ? data.unreadCount : (data.hasAdminReplied === false ? 1 : 0),
+          createdAt: rawCreated,
+          updatedAt: rawUpdated,
           ...data
         });
+      });
+
+      // Sort client-side by newest first
+      leads.sort((a, b) => {
+        const timeA = new Date(a.lastMessageAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.lastMessageAt || b.createdAt || 0).getTime();
+        return timeB - timeA;
       });
 
       console.log(`🔥 [Firestore] Received real-time leads update (${leads.length} contacts fetched from 'leads' collection):`, leads);
@@ -197,6 +231,43 @@ export function subscribeToLeads(onUpdate, onError) {
     return leadsUnsubscribe;
   } catch (err) {
     console.error("🔥 [Firestore Error] Failed to attach leads listener:", err);
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+let usersUnsubscribe = null;
+
+export function subscribeToUsers(onUpdate, onError) {
+  if (!db) {
+    if (onError) onError(new Error("Firestore is not initialized"));
+    return () => {};
+  }
+
+  if (usersUnsubscribe) {
+    usersUnsubscribe();
+    usersUnsubscribe = null;
+  }
+
+  try {
+    const usersRef = collection(db, 'users');
+    usersUnsubscribe = onSnapshot(usersRef, (snapshot) => {
+      const users = [];
+      snapshot.forEach((docSnap) => {
+        users.push({
+          id: docSnap.id,
+          ...docSnap.data()
+        });
+      });
+      if (onUpdate) onUpdate(users);
+    }, (error) => {
+      console.warn("Firestore users listener error:", error);
+      if (onError) onError(error);
+    });
+
+    return usersUnsubscribe;
+  } catch (err) {
+    console.warn("Attach users listener failed:", err);
     if (onError) onError(err);
     return () => {};
   }
@@ -444,14 +515,78 @@ export async function updateLeadAssignee(leadId, assigneeId, assigneeName) {
   });
 }
 
+/**
+ * Add a new note entry to a lead in Firestore
+ * @param {string} leadId
+ * @param {string} noteText
+ * @param {Object} author { id, name, role }
+ */
+export async function addLeadNote(leadId, noteText, author) {
+  if (!db || !leadId) {
+    throw new Error("Firestore is not connected");
+  }
+
+  const nowIso = new Date().toISOString();
+  const newNote = {
+    id: 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    text: (noteText || '').trim(),
+    authorId: author?.id || '',
+    authorName: author?.name || 'Agent',
+    authorRole: author?.role || 'agent',
+    createdAt: nowIso
+  };
+
+  console.log(`📝 [Firestore] Adding new note entry for lead [${leadId}] by ${newNote.authorName}`);
+  const leadRef = doc(db, 'leads', leadId);
+  await updateDoc(leadRef, {
+    notes: arrayUnion(newNote),
+    latestNote: newNote,
+    noteUpdatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+
+  return newNote;
+}
+
+/**
+ * Update lead notes directly in Firestore
+ * @param {string} leadId
+ * @param {Array|string} notes
+ */
+export async function updateLeadNotes(leadId, notes) {
+  if (!db || !leadId) {
+    throw new Error("Firestore is not connected");
+  }
+
+  console.log(`📝 [Firestore] Updating lead notes for [${leadId}]`);
+  const leadRef = doc(db, 'leads', leadId);
+  const nowIso = new Date().toISOString();
+  let latestNote = null;
+  if (Array.isArray(notes) && notes.length > 0) {
+    latestNote = notes[notes.length - 1];
+  } else if (typeof notes === 'string' && notes.trim()) {
+    latestNote = { text: notes.trim(), authorName: 'Admin', createdAt: nowIso };
+  }
+
+  await updateDoc(leadRef, {
+    notes: notes || [],
+    latestNote: latestNote,
+    noteUpdatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+}
+
 export async function saveUserToFirestore(userData) {
-  if (!db || !userData) return;
+  if (!db || !userData) {
+    console.warn("⚠️ [Firestore] Database not initialized yet. Skipping user save.");
+    return;
+  }
   try {
     const userRef = doc(db, 'users', userData.id);
-    await setDoc(userRef, userData);
-    console.log(`👤 [Firestore] Saved user document [${userData.id}]`);
+    await setDoc(userRef, userData, { merge: true });
+    console.log(`👤 [Firestore] Saved user document [${userData.id}] successfully to 'users' collection!`);
   } catch (err) {
-    console.warn("User Firestore save failed:", err);
+    console.error("❌ [Firestore Error] Could not save user to 'users' collection:", err);
   }
 }
 
@@ -473,7 +608,28 @@ export async function deleteUserFromFirestore(userId) {
     await deleteDoc(userRef);
     console.log(`🗑️ [Firestore] Deleted user document [${userId}]`);
   } catch (err) {
-    console.warn("User Firestore delete failed:", err);
+    console.error("❌ User Firestore delete failed:", err);
+    throw err;
+  }
+}
+
+export async function fetchUsersFromFirestore() {
+  if (!db) return [];
+  try {
+    const usersRef = collection(db, 'users');
+    const qSnap = await getDocs(usersRef);
+    const usersList = [];
+    qSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      usersList.push({
+        id: docSnap.id,
+        ...data
+      });
+    });
+    return usersList;
+  } catch (err) {
+    console.warn("Could not fetch users from Firestore:", err);
+    return [];
   }
 }
 
@@ -686,6 +842,71 @@ export async function sendWhatsAppMessage(payload) {
     return result.data;
   }
 
-  throw new Error("Firebase Functions client is not connected. Please check your Firebase configuration.");
+  throw new Error("Database client is not connected. Please check your Database configuration.");
+}
+
+export const sendWhatsAppMessageCloud = sendWhatsAppMessage;
+
+/**
+ * Create a new lead document in Firestore
+ * @param {Object} leadData
+ */
+export async function createNewLead(leadData) {
+  const rawPhone = (leadData.phone || '').trim();
+  const digitsPhone = rawPhone.replace(/\D/g, '');
+  const nowIso = new Date().toISOString();
+  const initialMsg = (leadData.initialMessage || '').trim();
+  const performerName = leadData.creatorName || 'Admin User';
+
+  let targetLeadId = leadData.id;
+
+  if (db && !targetLeadId && digitsPhone) {
+    try {
+      const leadsRef = collection(db, 'leads');
+      const qSnap = await getDocs(leadsRef);
+      qSnap.forEach(d => {
+        const dPhone = (d.data().phone || '').replace(/\D/g, '');
+        if (dPhone && dPhone === digitsPhone) {
+          targetLeadId = d.id;
+        }
+      });
+    } catch (qErr) {
+      console.warn("Could not query existing lead by phone:", qErr);
+    }
+  }
+
+  if (!targetLeadId) {
+    targetLeadId = 'lead_' + Date.now();
+  }
+
+  const docPayload = {
+    id: targetLeadId,
+    name: leadData.name || 'New Lead',
+    phone: rawPhone,
+    status: leadData.status || 'new',
+    platform: 'CRM',
+    source: 'CRM',
+    assigneeId: leadData.assigneeId || null,
+    assigneeName: leadData.assigneeName || 'Unassigned',
+    notes: leadData.notes || [],
+    latestNote: (Array.isArray(leadData.notes) && leadData.notes[0]) || null,
+    initiatedBy: 'crm',
+    isLead: true,
+    hasWhatsAppMessages: false,
+    unreadCount: 0,
+    lastMessage: '',
+    lastMessageText: '',
+    lastMessageTime: '',
+    lastMessageAt: nowIso,
+    createdAt: nowIso
+  };
+
+  if (db) {
+    console.log(`📝 [Firestore] Saving CRM lead document [${targetLeadId}]`);
+    const leadRef = doc(db, 'leads', targetLeadId);
+    await setDoc(leadRef, docPayload, { merge: true });
+  }
+
+  return docPayload;
 }
 

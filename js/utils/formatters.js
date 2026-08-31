@@ -70,3 +70,48 @@ export function formatTimeOnly(val) {
   if (!d) return '';
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+
+export const formatShortTime = formatTimeOnly;
+
+export function normalizePhone(phone) {
+  if (!phone && phone !== 0) return '';
+  return String(phone).replace(/\D/g, '');
+}
+
+export function formatDisplayPhone(phone) {
+  if (!phone && phone !== 0) return '';
+  const str = String(phone).trim();
+  if (!str) return '';
+  const digits = str.replace(/\D/g, '');
+  if (!digits) return str;
+  return '+' + digits;
+}
+
+export function getLeadNotesList(lead) {
+  if (!lead) return [];
+  if (Array.isArray(lead.notes)) {
+    return lead.notes.map(n => {
+      if (typeof n === 'string') {
+        return { text: n, authorName: 'Admin', createdAt: lead.createdAt || new Date().toISOString() };
+      }
+      return n;
+    });
+  }
+  if (typeof lead.notes === 'string' && lead.notes.trim()) {
+    return [{ text: lead.notes.trim(), authorName: 'Admin', createdAt: lead.noteUpdatedAt || lead.createdAt || new Date().toISOString() }];
+  }
+  if (typeof lead.note === 'string' && lead.note.trim()) {
+    return [{ text: lead.note.trim(), authorName: 'Admin', createdAt: lead.noteUpdatedAt || lead.createdAt || new Date().toISOString() }];
+  }
+  return [];
+}
+
+export function getLatestLeadNote(lead) {
+  if (!lead) return null;
+  if (lead.latestNote && typeof lead.latestNote === 'object' && lead.latestNote.text) {
+    return lead.latestNote;
+  }
+  const list = getLeadNotesList(lead);
+  if (list.length === 0) return null;
+  return list[list.length - 1];
+}

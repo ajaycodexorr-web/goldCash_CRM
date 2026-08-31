@@ -2,12 +2,14 @@
  * Outbound Message Composer, Staged Media Attachments Tray & Quick Templates
  */
 
-import { sendWhatsAppMessage, updateLeadAssignee } from '../../firebase-config.js';
+import { sendWhatsAppMessage, updateLeadAssignee, uploadFileToStorage } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { escapeHtml } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
 import { addAuditLog } from '../services/logging-service.js';
+import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
+import { hasPermission } from '../services/user-service.js';
 
 let activeMediaModalType = 'image';
 
@@ -111,13 +113,15 @@ export function setupComposerHandlers(renderLeadsView, renderConversationsView, 
   }
 
   document.querySelectorAll('.template-item').forEach(item => {
-    item.addEventListener('click', () => {
-      if (elements.messageTextInput) elements.messageTextInput.value = item.dataset.text;
-      if (elements.templatesPopover) elements.templatesPopover.style.display = 'none';
-      if (elements.messageTextInput) {
+    item.addEventListener('click', (e) => {
+      const templateEl = e.currentTarget;
+      const text = templateEl ? templateEl.dataset.text : '';
+      if (elements.messageTextInput && text) {
+        elements.messageTextInput.value = text;
         elements.messageTextInput.focus();
         autoResizeTextarea(elements.messageTextInput);
       }
+      if (elements.templatesPopover) elements.templatesPopover.style.display = 'none';
     });
   });
 
@@ -140,10 +144,78 @@ export function setupComposerHandlers(renderLeadsView, renderConversationsView, 
     elements.messageTextInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        elements.sendMessageForm.requestSubmit();
+        if (elements.sendMessageForm) elements.sendMessageForm.requestSubmit();
       }
     });
   }
+
+  // Setup Drag & Drop File Upload
+  setupDragAndDropHandlers();
+}
+
+export function setupDragAndDropHandlers() {
+  const chatView = document.getElementById('activeChatView');
+  const overlay = document.getElementById('chatDragDropOverlay');
+  if (!chatView) return;
+
+  let dragCounter = 0;
+
+  chatView.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter++;
+    if (overlay) overlay.style.display = 'flex';
+  });
+
+  chatView.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (overlay && overlay.style.display !== 'flex') {
+      overlay.style.display = 'flex';
+    }
+  });
+
+  chatView.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      if (overlay) overlay.style.display = 'none';
+    }
+  });
+
+  chatView.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter = 0;
+    if (overlay) overlay.style.display = 'none';
+
+    const files = Array.from(e.dataTransfer ? e.dataTransfer.files : []);
+    if (files.length === 0) return;
+
+    let addedCount = 0;
+    for (const file of files) {
+      let type = 'document';
+      if (file.type.startsWith('image/')) type = 'image';
+      else if (file.type.startsWith('video/')) type = 'video';
+      else if (file.type.startsWith('audio/')) type = 'audio';
+
+      addStagedAttachment({
+        id: 'att_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        type: type,
+        url: URL.createObjectURL(file),
+        file: file,
+        name: file.name
+      });
+      addedCount++;
+    }
+
+    if (addedCount > 0) {
+      showToast(`Attached ${addedCount} file(s)! Click Send or press Enter.`, 'info');
+      if (elements.messageTextInput) elements.messageTextInput.focus();
+    }
+  });
 }
 
 export function openMediaInputModal(type = 'image') {
@@ -216,27 +288,34 @@ export function renderStagingTray() {
 
 export function updateComposerDisabledState() {
   const isDisabled = state.currentUser && state.currentUser.status === 'disabled';
+  const canMessage = hasPermission('canSendMessage');
+  const isBlocked = isDisabled || !canMessage;
+
+  let placeholderText = "Type a WhatsApp message...";
+  if (isDisabled) {
+    placeholderText = "Your account is disabled by Admin. You cannot send messages.";
+  } else if (!canMessage) {
+    placeholderText = "Messaging permission has been restricted for your account.";
+  }
 
   if (elements.messageTextInput) {
-    elements.messageTextInput.disabled = isDisabled;
-    elements.messageTextInput.placeholder = isDisabled 
-      ? "Your account is disabled by Admin. You cannot send messages." 
-      : "Type a message...";
+    elements.messageTextInput.disabled = isBlocked;
+    elements.messageTextInput.placeholder = placeholderText;
   }
 
   if (elements.sendMessageBtn) {
-    elements.sendMessageBtn.disabled = isDisabled;
-    elements.sendMessageBtn.style.opacity = isDisabled ? '0.5' : '1';
-    elements.sendMessageBtn.style.cursor = isDisabled ? 'not-allowed' : 'pointer';
+    elements.sendMessageBtn.disabled = isBlocked;
+    elements.sendMessageBtn.style.opacity = isBlocked ? '0.5' : '1';
+    elements.sendMessageBtn.style.cursor = isBlocked ? 'not-allowed' : 'pointer';
   }
 
   if (elements.quickTemplatesBtn) {
-    elements.quickTemplatesBtn.disabled = isDisabled;
-    elements.quickTemplatesBtn.style.opacity = isDisabled ? '0.5' : '1';
+    elements.quickTemplatesBtn.disabled = isBlocked;
+    elements.quickTemplatesBtn.style.opacity = isBlocked ? '0.5' : '1';
   }
   if (elements.attachmentMenuBtn) {
-    elements.attachmentMenuBtn.disabled = isDisabled;
-    elements.attachmentMenuBtn.style.opacity = isDisabled ? '0.5' : '1';
+    elements.attachmentMenuBtn.disabled = isBlocked;
+    elements.attachmentMenuBtn.style.opacity = isBlocked ? '0.5' : '1';
   }
 }
 
@@ -247,6 +326,13 @@ export async function handleSendMessage(e, renderLeadsView, renderConversationsV
     showToast("Your account is disabled. You cannot send messages or perform actions.", "error");
     return;
   }
+
+  if (!hasPermission('canSendMessage')) {
+    showToast("You do not have permission to send messages.", "error");
+    return;
+  }
+
+  if (checkUserDisabledAndEnforceLogout()) return;
 
   const text = elements.messageTextInput ? elements.messageTextInput.value.trim() : '';
   const leadId = state.activeLeadId;
@@ -274,7 +360,7 @@ export async function handleSendMessage(e, renderLeadsView, renderConversationsV
         activeLead.assigneeId = state.currentUser.id;
         activeLead.assigneeName = state.currentUser.name;
         if (!state.demoMode) {
-          updateLeadAssignee(leadId, state.currentUser.id, state.currentUser.name).catch(() => {});
+          updateLeadAssignee(leadId, state.currentUser.id, state.currentUser.name).catch(() => { });
         }
       }
     }

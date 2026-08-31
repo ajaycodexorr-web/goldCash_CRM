@@ -17,18 +17,47 @@ import { setupComposerHandlers } from './components/composer.js';
 import { setupLightboxHandlers } from './components/lightbox.js';
 import { setupLogsHandlers, renderLogsView } from './components/logs-table.js';
 import { setupUserSwitcher } from './components/user-switcher.js';
-import { setupTeamManagement } from './components/team-management.js';
-import { initAuthCheck } from './services/auth-service.js';
+import { setupTeamManagement, renderTeamList } from './components/team-management.js';
+import { setupSettingsView, renderSettingsView } from './components/settings-view.js';
+import { initAuthCheck, checkUserDisabledAndEnforceLogout } from './services/auth-service.js';
 import { setupLoginView } from './components/login-view.js';
+import { global_settings_CRM } from './constants/global-settings.js';
+import { setupNotificationDropdown } from './components/notifications-dropdown.js';
 
 // Application Initialization Bootstrapper
 document.addEventListener('DOMContentLoaded', () => {
+  global_settings_CRM.apply();
   loadSavedLogs();
   loadTeamMembers();
 
-  const handleSwitchView = (v) => switchView(v, handleRenderLeads, renderConversationsView, renderLogsView);
+  // Background Heartbeat Poller: Periodically check if active user status is disabled and enforce immediate logout!
+  setInterval(() => {
+    checkUserDisabledAndEnforceLogout();
+  }, 1500);
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'crm_team_members_v1') {
+      loadTeamMembers();
+      checkUserDisabledAndEnforceLogout();
+    }
+  });
+
+  const handleRenderTeam = () => renderTeamList(handleRenderTeam);
+  const handleRenderSettings = () => renderSettingsView();
+  const handleSwitchView = (v) => switchView(v, handleRenderLeads, renderConversationsView, renderLogsView, handleRenderTeam, handleRenderSettings);
   const handleOpenLeadChat = (id) => openLeadChat(id, handleSwitchView, handleRenderLeads);
   const handleRenderLeads = () => renderLeadsView(renderConversationsView, handleOpenLeadChat);
+
+  const triggerDatabaseConnection = () => {
+    connectFirebase(
+      handleRenderLeads,
+      renderConversationsView,
+      renderLogsView,
+      updateActiveChatHeader,
+      handleSwitchView,
+      highlightLeadCard
+    );
+  };
 
   // Setup Login Page & Authentication Check
   setupLoginView((user) => {
@@ -36,16 +65,22 @@ document.addEventListener('DOMContentLoaded', () => {
       handleRenderLeads();
       renderConversationsView();
       renderLogsView();
+      handleRenderSettings();
     });
-    handleRenderLeads();
-    renderConversationsView();
-    renderLogsView();
+    handleSwitchView('leads');
+    triggerDatabaseConnection();
   });
 
   const isAuthenticated = initAuthCheck((user) => {
-    handleRenderLeads();
-    renderConversationsView();
-    renderLogsView();
+    setupUserSwitcher();
+    if (user && (user.role === 'maker' || user.role === 'agent') && (state.activeView === 'team' || state.activeView === 'logs')) {
+      handleSwitchView('leads');
+    } else if (state.activeView) {
+      handleSwitchView(state.activeView);
+    } else {
+      handleSwitchView('leads');
+    }
+    triggerDatabaseConnection();
   });
 
   // Setup UI Component Event Handlers
@@ -53,39 +88,43 @@ document.addEventListener('DOMContentLoaded', () => {
     handleRenderLeads();
     renderConversationsView();
     renderLogsView();
+    handleRenderSettings();
   });
   setupTeamManagement(() => {
     setupUserSwitcher(() => {
       handleRenderLeads();
       renderConversationsView();
       renderLogsView();
+      handleRenderSettings();
     });
     handleRenderLeads();
   });
-  setupNavigation(handleRenderLeads, renderConversationsView, renderLogsView);
-  setupLeadsHandlers(renderConversationsView, handleOpenLeadChat);
+  setupSettingsView(() => {
+    setupUserSwitcher(() => {
+      handleRenderLeads();
+      renderConversationsView();
+      renderLogsView();
+      handleRenderSettings();
+    });
+  });
+  setupNavigation(handleRenderLeads, renderConversationsView, renderLogsView, handleRenderTeam, handleRenderSettings);
+  setupLeadsHandlers(renderConversationsView, handleOpenLeadChat, handleRenderLeads);
   setupConversationsHandlers(handleSwitchView, handleRenderLeads);
   setupComposerHandlers(handleRenderLeads, renderConversationsView, renderMessagesStream, updateLeadStatus);
   setupLightboxHandlers();
   setupLogsHandlers();
   setupExportHandlers();
+  setupNotificationDropdown((leadId) => {
+    handleSwitchView('leads');
+    highlightLeadCard(leadId);
+  });
   setupConfigModalHandlers(handleRenderLeads, handleSwitchView);
-
-  // Initialize Firebase Connection
-  connectFirebase(
-    handleRenderLeads,
-    renderConversationsView,
-    renderLogsView,
-    updateActiveChatHeader,
-    handleSwitchView,
-    highlightLeadCard
-  );
 });
 
 function setupConfigModalHandlers(handleRenderLeads, handleSwitchView) {
   if (elements.popupRetryBtn) {
     elements.popupRetryBtn.addEventListener('click', () => {
-      showToast('Attempting to reconnect to Firebase...', 'info');
+      showToast('Attempting to reconnect to Database...', 'info');
       connectFirebase(
         handleRenderLeads,
         renderConversationsView,
@@ -133,7 +172,7 @@ function setupConfigModalHandlers(handleRenderLeads, handleSwitchView) {
 
       saveConfig(config);
       if (elements.configModal) elements.configModal.style.display = 'none';
-      showToast('Firebase configuration saved. Connecting...', 'info');
+      showToast('Database configuration saved. Connecting...', 'info');
       connectFirebase(
         handleRenderLeads,
         renderConversationsView,

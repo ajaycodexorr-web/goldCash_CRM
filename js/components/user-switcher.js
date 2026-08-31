@@ -9,6 +9,7 @@ import { showToast } from '../utils/notifications.js';
 import { updateComposerDisabledState } from './composer.js';
 import { updateExportBtnDisabledState } from '../utils/export-excel.js';
 import { logoutUser } from '../services/auth-service.js';
+import { hasPermission } from '../services/user-service.js';
 
 export function setupUserSwitcher(onUserSwitch) {
   const container = document.getElementById('userProfileCardWrap');
@@ -21,34 +22,65 @@ export function renderUserSwitcher(container, onUserSwitch) {
   if (!container) return;
 
   // Security Check: If current active user was deleted, trigger immediate logout
-  if (state.currentUser && state.currentUser.role !== 'admin' && !state.teamMembers.some(u => u.id === state.currentUser.id)) {
+  if (state.currentUser && !['super_admin', 'admin'].includes(state.currentUser.role) && !state.teamMembers.some(u => u.id === state.currentUser.id)) {
     logoutUser(() => {
-      showToast("Your account has been deleted by Admin.", "error");
+      showToast("Your account has been removed.", "error");
       if (onUserSwitch) onUserSwitch(null);
     });
     return;
   }
 
-  const current = state.currentUser || { id: 'usr_admin', name: 'Admin User', role: 'admin' };
+  const current = state.currentUser || { id: 'usr_admin', name: 'Super Admin', role: 'super_admin' };
   const initials = getInitials(current.name);
-  const isAgent = current.role === 'agent';
+  const isMaker = current.role === 'maker' || current.role === 'agent';
   const isDisabled = current.status === 'disabled';
-  const roleLabel = isDisabled ? 'DISABLED' : (current.role ? current.role.toUpperCase() : 'ADMIN');
+  
+  let roleLabel = 'MAKER';
+  if (current.role === 'super_admin' || current.role === 'admin') roleLabel = 'SUPER ADMIN';
+  else if (current.role === 'sub_admin') roleLabel = 'SUB ADMIN';
+  else if (isMaker) roleLabel = 'MAKER';
 
-  const openTeamBtn = document.getElementById('openTeamModalBtn');
-  if (openTeamBtn) {
-    openTeamBtn.style.display = (current.role === 'admin' && !isDisabled) ? 'flex' : 'none';
+  if (isDisabled) roleLabel = 'DISABLED';
+
+  const canSeeTeams = hasPermission('canViewTeams', current);
+  const canSeeLogs = hasPermission('canViewLogs', current);
+
+  const navTeamBtn = elements.navItemTeam || document.getElementById('navItemTeam');
+  if (navTeamBtn) {
+    navTeamBtn.style.display = (canSeeTeams && !isDisabled) ? 'flex' : 'none';
+    if (!canSeeTeams && elements.teamViewSection) {
+      elements.teamViewSection.style.display = 'none';
+    }
+  }
+
+  const navLogsBtn = elements.navItemLogs || document.getElementById('navItemLogs');
+  if (navLogsBtn) {
+    navLogsBtn.style.display = (canSeeLogs && !isDisabled) ? 'flex' : 'none';
+    if (!canSeeLogs && elements.logsViewSection) {
+      elements.logsViewSection.style.display = 'none';
+    }
+  }
+
+  const navSettingsBtn = elements.navItemSettings || document.getElementById('navItemSettings');
+  if (navSettingsBtn) {
+    navSettingsBtn.style.display = !isDisabled ? 'flex' : 'none';
+    if (isDisabled && elements.settingsViewSection) {
+      elements.settingsViewSection.style.display = 'none';
+    }
   }
 
   // Update composer and export button locking for disabled status
   updateComposerDisabledState();
   updateExportBtnDisabledState();
 
+  const isSuperAdmin = current.role === 'super_admin' || current.role === 'admin';
+  const hasCustomName = current.name && current.name.trim() !== '' && current.name.toLowerCase() !== 'super admin' && !isSuperAdmin;
+
   container.innerHTML = `
     <div class="user-profile-switcher-card ${isDisabled ? 'card-disabled' : ''}">
-      <div class="user-avatar-initials ${isAgent ? 'agent-avatar' : ''} ${isDisabled ? 'disabled-avatar' : ''}">${escapeHtml(initials)}</div>
+      <div class="user-avatar-initials ${isMaker ? 'agent-avatar' : ''} ${isDisabled ? 'disabled-avatar' : ''}">${escapeHtml(initials)}</div>
       <div class="user-info-switcher">
-        <div class="user-name-switcher" title="${escapeHtml(current.name)}">${escapeHtml(current.name)}</div>
+        ${hasCustomName ? `<div class="user-name-switcher" title="${escapeHtml(current.name)}">${escapeHtml(current.name)}</div>` : ''}
         <div class="user-role-select-row">
           <span class="user-role-badge ${isDisabled ? 'disabled' : current.role}">${escapeHtml(roleLabel)}</span>
         </div>

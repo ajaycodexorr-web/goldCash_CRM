@@ -4,8 +4,10 @@
 
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
-import { formatFullDateTime, parseDate, escapeHtml } from './formatters.js';
+import { formatFullDateTime, parseDate, escapeHtml, formatDisplayPhone, getLeadNotesList } from './formatters.js';
 import { showToast } from './notifications.js';
+import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
+import { hasPermission } from '../services/user-service.js';
 
 export function setupExportHandlers() {
   if (elements.exportExcelBtn) {
@@ -34,17 +36,28 @@ export function setupExportHandlers() {
 
 export function updateExportBtnDisabledState() {
   const isDisabled = state.currentUser && state.currentUser.status === 'disabled';
+  const canExport = hasPermission('canExportExcel');
+  const isBlocked = isDisabled || !canExport;
+
   if (elements.exportExcelBtn) {
-    elements.exportExcelBtn.disabled = isDisabled;
-    elements.exportExcelBtn.style.opacity = isDisabled ? '0.5' : '1';
-    elements.exportExcelBtn.style.cursor = isDisabled ? 'not-allowed' : 'pointer';
-    elements.exportExcelBtn.title = isDisabled ? "Your account is disabled. Export restricted." : "Export leads to Excel";
+    elements.exportExcelBtn.disabled = isBlocked;
+    elements.exportExcelBtn.style.opacity = isBlocked ? '0.5' : '1';
+    elements.exportExcelBtn.style.cursor = isBlocked ? 'not-allowed' : 'pointer';
+    if (isDisabled) {
+      elements.exportExcelBtn.title = "Your account is disabled. Export restricted.";
+    } else if (!canExport) {
+      elements.exportExcelBtn.title = "Export permission has been restricted for your account.";
+    } else {
+      elements.exportExcelBtn.title = "Export leads to Excel";
+    }
   }
 }
 
 export function openExportModal() {
-  if (state.currentUser && state.currentUser.status === 'disabled') {
-    showToast("Your account is disabled. You cannot export data.", "error");
+  if (checkUserDisabledAndEnforceLogout()) return;
+
+  if (!hasPermission('canExportExcel')) {
+    showToast("You do not have permission to export leads to Excel.", "warning");
     return;
   }
 
@@ -126,15 +139,19 @@ export async function exportLeadsToExcel(leadsToExport) {
         { header: 'User Query', key: 'query', width: 50 },
         { header: 'Platform', key: 'platform', width: 14 },
         { header: 'Status', key: 'status', width: 16 },
+        { header: 'Notes', key: 'notes', width: 35 },
         { header: 'Created Date', key: 'created', width: 26 }
       ];
 
       // Add rows
       leadsToExport.forEach(lead => {
-        const displayName = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
-        const phone = lead.phone || lead.id;
+        const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+        const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
+        const phone = formatDisplayPhone(lead.phone || lead.id);
         const userFirstQuery = getUserFirstQuery(lead);
         const platform = "WhatsApp";
+        const notesList = getLeadNotesList(lead);
+        const leadNotesStr = notesList.map(n => `[${n.authorName || 'Agent'} - ${formatFullDateTime(n.createdAt)}]: ${n.text}`).join('\n') || (typeof lead.notes === 'string' ? lead.notes : '');
 
         const statusRaw = (lead.status || 'new').toLowerCase();
         const statusMap = {
@@ -155,6 +172,7 @@ export async function exportLeadsToExcel(leadsToExport) {
           query: userFirstQuery,
           platform: platform,
           status: status,
+          notes: leadNotesStr,
           created: createdDate
         });
       });
@@ -195,7 +213,7 @@ export async function exportLeadsToExcel(leadsToExport) {
             cell.font = { name: 'Segoe UI', size: 10.5 };
             cell.alignment = {
               vertical: 'middle',
-              horizontal: (colNumber === 1 || colNumber === 2 || colNumber === 3) ? 'left' : 'center',
+              horizontal: (colNumber === 1 || colNumber === 2 || colNumber === 3 || colNumber === 6) ? 'left' : 'center',
               wrapText: true
             };
             cell.border = {
@@ -232,7 +250,7 @@ export async function exportLeadsToExcel(leadsToExport) {
   }
 
   // Fallback HTML XML format
-  const headers = ["Name", "Phone number", "User Query", "Platform", "Status", "Created Date"];
+  const headers = ["Name", "Phone number", "User Query", "Platform", "Status", "Notes", "Created Date"];
   let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
@@ -255,13 +273,16 @@ export async function exportLeadsToExcel(leadsToExport) {
   html += `</tr></thead><tbody>`;
 
   leadsToExport.forEach(lead => {
-    const displayName = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
-    const phone = lead.phone || lead.id;
+    const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+    const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
+    const phone = formatDisplayPhone(lead.phone || lead.id);
     const userFirstQuery = getUserFirstQuery(lead);
     const platform = "WhatsApp";
     const statusRaw = (lead.status || 'new').toLowerCase();
     const statusMap = { 'new': 'New', 'contacted': 'Contacted', 'no_answer': 'No Answer', 'follow_up': 'Follow Up', 'converted': 'Converted', 'lost': 'Lost', 'deleted': 'Deleted' };
     const status = statusMap[statusRaw] || statusRaw.toUpperCase();
+    const notesList = getLeadNotesList(lead);
+    const leadNotesStr = notesList.map(n => `[${n.authorName || 'Agent'} - ${formatFullDateTime(n.createdAt)}]: ${n.text}`).join('<br/>') || (typeof lead.notes === 'string' ? lead.notes : '');
     const createdDate = formatFullDateTime(lead.createdAt || lead.lastMessageAt);
 
     html += `<tr>
@@ -270,6 +291,7 @@ export async function exportLeadsToExcel(leadsToExport) {
       <td style="text-align: left;">${escapeHtml(userFirstQuery)}</td>
       <td style="text-align: center;"><span style="color: #15803d; font-weight: 600;">${escapeHtml(platform)}</span></td>
       <td style="text-align: center;"><span style="font-weight: 600;">${escapeHtml(status)}</span></td>
+      <td style="text-align: left;">${leadNotesStr}</td>
       <td style="text-align: center;">${escapeHtml(createdDate)}</td>
     </tr>`;
   });
@@ -288,20 +310,14 @@ export async function exportLeadsToExcel(leadsToExport) {
 }
 
 export function getUserFirstQuery(lead) {
-  if (!lead) return 'No message content available';
+  if (!lead) return '-';
 
   if (lead._firstUserMsg && typeof lead._firstUserMsg === 'string' && lead._firstUserMsg.trim()) {
     return lead._firstUserMsg.trim();
   }
 
-  if (lead.firstMessage && typeof lead.firstMessage === 'string' && lead.firstMessage.trim()) {
-    return lead.firstMessage.trim();
-  }
   if (lead.firstUserMessage && typeof lead.firstUserMessage === 'string' && lead.firstUserMessage.trim()) {
     return lead.firstUserMessage.trim();
-  }
-  if (lead.initialMessage && typeof lead.initialMessage === 'string' && lead.initialMessage.trim()) {
-    return lead.initialMessage.trim();
   }
   if (lead.userQuery && typeof lead.userQuery === 'string' && lead.userQuery.trim()) {
     return lead.userQuery.trim();
@@ -320,9 +336,17 @@ export function getUserFirstQuery(lead) {
     }
   }
 
-  if (lead.lastMessage && typeof lead.lastMessage === 'string' && lead.lastMessage.trim()) {
+  // If CRM-created lead without incoming customer messages, show "-"
+  if ((lead.platform || lead.source || '').toUpperCase() === 'CRM') {
+    return '-';
+  }
+
+  if (lead.firstMessage && typeof lead.firstMessage === 'string' && lead.firstMessage.trim()) {
+    return lead.firstMessage.trim();
+  }
+  if (lead.lastMessage && typeof lead.lastMessage === 'string' && lead.lastMessage.trim() && lead.lastMessage !== 'Lead created manually') {
     return lead.lastMessage.trim();
   }
 
-  return 'No message content available';
+  return '-';
 }

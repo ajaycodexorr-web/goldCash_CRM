@@ -2,15 +2,19 @@
  * Team Inbox Conversations List & Active Chat Pane Controller
  */
 
-import { subscribeToMessages, markLeadAsRead, resolveWhatsAppMediaUrl } from '../../firebase-config.js';
+import { subscribeToMessages, markLeadAsRead, resolveWhatsAppMediaUrl, addLeadNote, updateLeadStatus, updateLeadAssignee } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { DEMO_LEADS } from '../constants/demo-data.js';
-import { escapeHtml, getInitials, formatRelativeTime, formatTimeOnly, parseDate } from '../utils/formatters.js';
+import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, formatTimeOnly, parseDate, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
 import { clearAllStagedAttachments, autoResizeTextarea } from './composer.js';
 import { openLightbox } from './lightbox.js';
-import { handleDeleteLead } from './leads-table.js';
+import { handleDeleteLead, openLeadNotesModal, updateActiveChatNotes, renderLeadNotesHistory } from './leads-table.js';
+import { getUserFirstQuery } from '../utils/export-excel.js';
+import { addAuditLog } from '../services/logging-service.js';
+import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
+import { hasPermission } from '../services/user-service.js';
 
 export function setupConversationsHandlers(switchView, renderLeadsView) {
   if (elements.convSearchInput) {
@@ -37,6 +41,23 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
         if (lead) lead.unreadCount = 0;
         renderConversationsView();
         showToast('Marked as read', 'info');
+      }
+    });
+  }
+
+  // Open Lead Notes Modal from Active Chat Header & Quick Bar
+  if (elements.chatNotesBtn) {
+    elements.chatNotesBtn.addEventListener('click', () => {
+      if (state.activeLeadId) {
+        openLeadNotesModal(state.activeLeadId, renderLeadsView, renderConversationsView);
+      }
+    });
+  }
+
+  if (elements.chatAddNoteBtn) {
+    elements.chatAddNoteBtn.addEventListener('click', () => {
+      if (state.activeLeadId) {
+        openLeadNotesModal(state.activeLeadId, renderLeadsView, renderConversationsView);
       }
     });
   }
@@ -69,14 +90,220 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
       if (elements.quickTemplatesBtn) elements.quickTemplatesBtn.click();
     });
   }
+
+  // Toggle Contact Details Sidebar
+  if (elements.toggleContactDetailsBtn) {
+    elements.toggleContactDetailsBtn.addEventListener('click', () => {
+      if (!elements.contactDetailsPane) return;
+      const isVisible = elements.contactDetailsPane.style.display !== 'none';
+      elements.contactDetailsPane.style.display = isVisible ? 'none' : 'flex';
+      elements.toggleContactDetailsBtn.classList.toggle('active', !isVisible);
+    });
+  }
+
+  if (elements.closeContactDetailsBtn) {
+    elements.closeContactDetailsBtn.addEventListener('click', () => {
+      if (elements.contactDetailsPane) elements.contactDetailsPane.style.display = 'none';
+      if (elements.toggleContactDetailsBtn) elements.toggleContactDetailsBtn.classList.remove('active');
+    });
+  }
+
+  // Copy Phone Number
+  if (elements.copyContactPhoneBtn) {
+    elements.copyContactPhoneBtn.addEventListener('click', () => {
+      if (state.activeLeadId) {
+        const lead = state.leads.find(l => l.id === state.activeLeadId);
+        const phone = lead ? (lead.phone || lead.id) : '';
+        if (phone) {
+          navigator.clipboard.writeText(phone);
+          showToast('Phone number copied to clipboard!', 'info');
+        }
+      }
+    });
+  }
+
+  // Sidebar Owner Select Change
+  if (elements.contactDetailsOwnerSelect) {
+    elements.contactDetailsOwnerSelect.addEventListener('change', async (e) => {
+      if (checkUserDisabledAndEnforceLogout()) return;
+      const newAssigneeId = e.target.value;
+      const leadId = state.activeLeadId;
+      if (!leadId) return;
+
+      const lead = state.leads.find(l => l.id === leadId);
+      const teamMembers = state.teamMembers || [];
+      const assignedUser = teamMembers.find(u => u.id === newAssigneeId);
+      const assigneeName = assignedUser ? assignedUser.name : 'Unassigned';
+
+      if (lead) {
+        lead.assigneeId = newAssigneeId || null;
+        lead.assigneeName = assigneeName;
+        lead.assignedAt = new Date().toISOString();
+      }
+
+      if (!state.demoMode) {
+        try {
+          await updateLeadAssignee(leadId, newAssigneeId, assigneeName);
+        } catch (err) {
+          console.warn("Assignee update error:", err);
+        }
+      }
+
+      addAuditLog('assignee_change', leadId, lead ? lead.name : leadId, `Assigned owner changed to ${assigneeName}`);
+      showToast(`Assigned owner changed to ${assigneeName}`, 'info');
+      if (renderLeadsView) renderLeadsView(renderConversationsView);
+      renderConversationsView();
+    });
+  }
+
+  // Sidebar Status Select Change
+  if (elements.contactDetailsStatusSelect) {
+    elements.contactDetailsStatusSelect.addEventListener('change', async (e) => {
+      if (checkUserDisabledAndEnforceLogout()) return;
+      const newStatus = e.target.value;
+      const leadId = state.activeLeadId;
+      if (!leadId) return;
+
+      const lead = state.leads.find(l => l.id === leadId);
+      if (lead) {
+        lead.status = newStatus;
+      }
+
+      if (!state.demoMode) {
+        try {
+          await updateLeadStatus(leadId, newStatus);
+        } catch (err) {
+          showToast(`Failed to update status: ${err.message}`, 'error');
+        }
+      }
+
+      addAuditLog('status_change', leadId, lead ? lead.name : leadId, `Updated lead status to ${newStatus.toUpperCase()}`);
+      showToast(`Lead status updated to ${newStatus}`, 'info');
+      if (renderLeadsView) renderLeadsView(renderConversationsView);
+      renderConversationsView();
+    });
+  }
+
+  // Sidebar Add Note Form Submit
+  if (elements.contactDetailsAddNoteForm) {
+    elements.contactDetailsAddNoteForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (checkUserDisabledAndEnforceLogout()) return;
+      const targetLeadId = state.activeLeadId;
+      if (!targetLeadId) return;
+
+      const lead = state.leads.find(l => l.id === targetLeadId);
+      const newNoteText = elements.contactDetailsNoteInput ? elements.contactDetailsNoteInput.value.trim() : '';
+      if (!newNoteText) return;
+
+      const authorInfo = {
+        id: state.currentUser ? state.currentUser.id : '',
+        name: state.currentUser ? state.currentUser.name : 'Super Admin',
+        role: state.currentUser ? state.currentUser.role : 'admin'
+      };
+
+      const submitBtn = elements.contactDetailsAddNoteSubmitBtn;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Adding...';
+      }
+
+      try {
+        let createdNote = null;
+        if (!state.demoMode) {
+          createdNote = await addLeadNote(targetLeadId, newNoteText, authorInfo);
+        } else {
+          createdNote = {
+            id: 'note_' + Date.now(),
+            text: newNoteText,
+            authorId: authorInfo.id,
+            authorName: authorInfo.name,
+            authorRole: authorInfo.role,
+            createdAt: new Date().toISOString()
+          };
+        }
+
+        if (lead) {
+          if (!Array.isArray(lead.notes)) {
+            lead.notes = getLeadNotesList(lead);
+          }
+          lead.notes.push(createdNote);
+          lead.latestNote = createdNote;
+          lead.noteUpdatedAt = createdNote.createdAt;
+        }
+
+        // Re-render sidebar notes feed
+        renderContactDetailsNotesFeed(lead);
+
+        // Update active chat header preview
+        updateActiveChatNotes(lead);
+
+        addAuditLog('note_update', targetLeadId, lead ? lead.name : targetLeadId, `Added note: "${newNoteText.substring(0, 40)}..."`);
+        showToast('Note added successfully!', 'info');
+
+        if (elements.contactDetailsNoteInput) {
+          elements.contactDetailsNoteInput.value = '';
+        }
+
+        if (renderLeadsView) renderLeadsView(renderConversationsView);
+      } catch (err) {
+        showToast(`Failed to add note: ${err.message}`, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Add Note';
+        }
+      }
+    });
+  }
+
+  // Audit Logs Link
+  if (elements.contactViewAuditBtn) {
+    elements.contactViewAuditBtn.addEventListener('click', () => {
+      if (switchView) {
+        switchView('logs');
+        if (elements.logsSearchInput && state.activeLeadId) {
+          const lead = state.leads.find(l => l.id === state.activeLeadId);
+          elements.logsSearchInput.value = lead ? (lead.name || lead.phone || lead.id) : state.activeLeadId;
+          elements.logsSearchInput.dispatchEvent(new Event('input'));
+        }
+      }
+    });
+  }
 }
 
 export function renderConversationsView() {
   const { leads, convSearchQuery, convFilter, activeLeadId, currentUser } = state;
-  const isAgent = currentUser && currentUser.role === 'agent';
+  const isAgent = currentUser && (currentUser.role === 'agent' || currentUser.role === 'maker');
 
-  // Conversations Tab shows active chats
-  let activeConversations = leads.filter(lead => (lead.status || '').toLowerCase() !== 'deleted');
+  // Deduplicate active leads by ID or normalized phone number
+  const uniqueMap = new Map();
+  leads.forEach(lead => {
+    if ((lead.status || '').toLowerCase() === 'deleted') return;
+    const normP = normalizePhone(lead.phone);
+    const key = normP ? `phone_${normP}` : lead.id;
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, lead);
+    } else {
+      const existing = uniqueMap.get(key);
+      uniqueMap.set(key, { ...existing, ...lead, name: (lead.name && lead.name !== lead.phone) ? lead.name : existing.name });
+    }
+  });
+
+  let activeConversations = Array.from(uniqueMap.values()).filter(lead => {
+    // If created by CRM and no WhatsApp messages have arrived or been sent, do NOT show in Team Inbox conversations
+    const isCrmPlatform = (lead.platform || lead.source || '').toUpperCase() === 'CRM';
+    const hasMessages = lead.hasWhatsAppMessages === true ||
+      (lead.messagesCount && lead.messagesCount > 0) ||
+      (lead.lastMessage && lead.lastMessage.trim() && lead.lastMessage !== 'Lead created manually') ||
+      (Array.isArray(lead.messages) && lead.messages.length > 0) ||
+      Boolean(lead.lastInboundAt);
+
+    if (isCrmPlatform && !hasMessages) {
+      return false;
+    }
+    return true;
+  });
 
   // Strict Agent Filter: Agents ONLY see conversations for leads assigned to them ("Show only assign")
   if (isAgent) {
@@ -88,6 +315,7 @@ export function renderConversationsView() {
       if (activeLead && activeLead.assigneeId !== currentUser.id) {
         state.activeLeadId = null;
         if (elements.activeChatView) elements.activeChatView.style.display = 'none';
+        if (elements.contactDetailsPane) elements.contactDetailsPane.style.display = 'none';
         if (elements.chatPlaceholder) elements.chatPlaceholder.style.display = 'flex';
       }
     }
@@ -96,7 +324,7 @@ export function renderConversationsView() {
   const filtered = activeConversations.filter(lead => {
     const displayName = (lead.name || lead.phone || '').toLowerCase();
     const phone = (lead.phone || '').toLowerCase();
-    const lastMsg = (lead.lastMessage || '').toLowerCase();
+    const lastMsg = (lead.lastMessage || lead.lastMessageText || '').toLowerCase();
 
     const matchesSearch = !convSearchQuery ||
       displayName.includes(convSearchQuery) ||
@@ -125,13 +353,22 @@ export function renderConversationsView() {
 
   elements.conversationsList.innerHTML = filtered.map(lead => {
     const isActive = lead.id === activeLeadId;
-    const displayName = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+    const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+    const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
     const relativeTime = formatRelativeTime(lead.lastMessageAt || lead.createdAt);
     const hasUnread = (lead.unreadCount || 0) > 0;
-    const lastMsgText = lead.lastMessage || 'No messages yet';
+    const lastMsgText = lead.lastMessage || lead.lastMessageText || 'No messages yet';
+    const initials = getInitials(displayName);
+    const isCrmPlatform = (lead.platform || lead.source || '').toUpperCase() === 'CRM';
 
     return `
       <div class="conv-item ${isActive ? 'active' : ''}" data-lead-id="${escapeHtml(lead.id)}">
+        <div class="conv-avatar-wrap">
+          <div class="conv-avatar">${escapeHtml(initials)}</div>
+          <span class="wa-icon-badge ${isCrmPlatform ? 'crm' : ''}" title="${isCrmPlatform ? 'CRM Lead' : 'WhatsApp Lead'}">
+            ${isCrmPlatform ? '<i class="fa-solid fa-laptop"></i>' : '<i class="fa-brands fa-whatsapp"></i>'}
+          </span>
+        </div>
         <div class="conv-info">
           <div class="conv-top-row">
             <span class="conv-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
@@ -174,6 +411,7 @@ export function selectLead(leadId, renderLeadsView) {
 
   if (elements.chatPlaceholder) elements.chatPlaceholder.style.display = 'none';
   if (elements.activeChatView) elements.activeChatView.style.display = 'flex';
+  if (elements.contactDetailsPane) elements.contactDetailsPane.style.display = 'flex';
   if (elements.chatErrorBanner) elements.chatErrorBanner.style.display = 'none';
 
   clearAllStagedAttachments();
@@ -194,10 +432,143 @@ export function selectLead(leadId, renderLeadsView) {
 }
 
 export function updateActiveChatHeader(lead) {
-  const displayName = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
+  const phoneDisplay = formatDisplayPhone(lead.phone || lead.id);
   if (elements.chatContactName) elements.chatContactName.textContent = displayName;
-  if (elements.chatContactPhone) elements.chatContactPhone.innerHTML = `<i class="fa-solid fa-phone"></i> ${escapeHtml(lead.phone || lead.id)}`;
+  if (elements.chatContactPhone) elements.chatContactPhone.innerHTML = `<i class="fa-solid fa-phone"></i> ${escapeHtml(phoneDisplay)}`;
   if (elements.chatContactAvatar) elements.chatContactAvatar.textContent = getInitials(displayName);
+  
+  if (elements.deleteLeadBtn) {
+    const isDeleted = (lead.status || '').toLowerCase() === 'deleted';
+    const canDelete = hasPermission('canDeleteLead') && !isDeleted;
+    elements.deleteLeadBtn.style.display = canDelete ? 'inline-flex' : 'none';
+  }
+
+  updateActiveChatNotes(lead);
+  renderContactDetailsPanel(lead);
+}
+
+export function renderContactDetailsPanel(lead) {
+  if (!lead || !elements.contactDetailsPane) return;
+
+  const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
+  const phoneDisplay = formatDisplayPhone(lead.phone || lead.id);
+  const userFirstQuery = getUserFirstQuery(lead);
+
+  if (elements.contactDetailsAvatar) {
+    elements.contactDetailsAvatar.textContent = getInitials(displayName);
+  }
+
+  if (elements.contactDetailsPhone) {
+    elements.contactDetailsPhone.textContent = phoneDisplay;
+  }
+  if (elements.contactDetailsName) {
+    elements.contactDetailsName.textContent = displayName;
+  }
+
+  // Populate Owner Select dropdown
+  if (elements.contactDetailsOwnerSelect) {
+    const teamMembers = state.teamMembers || [];
+    const currentAssigneeId = lead.assigneeId || '';
+    const canAssign = hasPermission('canAssignLead');
+    elements.contactDetailsOwnerSelect.disabled = !canAssign;
+    elements.contactDetailsOwnerSelect.innerHTML = `
+      <option value="" ${!currentAssigneeId ? 'selected' : ''}>Unassigned</option>
+      ${teamMembers.map(user => `
+        <option value="${user.id}" ${currentAssigneeId === user.id ? 'selected' : ''}>
+          ${user.role === 'admin' ? '🛡️' : '👤'} ${escapeHtml(user.name)}
+        </option>
+      `).join('')}
+    `;
+  }
+
+  // Set Status Select dropdown
+  if (elements.contactDetailsStatusSelect) {
+    elements.contactDetailsStatusSelect.value = (lead.status || 'new').toLowerCase();
+  }
+
+  // Update Platform Tag Pill
+  const platformPill = document.getElementById('contactDetailsPlatformPill');
+  if (platformPill) {
+    const isCrm = (lead.platform || lead.source || '').toUpperCase() === 'CRM';
+    if (isCrm) {
+      platformPill.className = 'tag-pill crm';
+      platformPill.innerHTML = '<i class="fa-solid fa-laptop"></i> CRM';
+    } else {
+      platformPill.className = 'tag-pill whatsapp';
+      platformPill.innerHTML = '<i class="fa-brands fa-whatsapp"></i> WhatsApp';
+    }
+  }
+
+  // Populate Fields tab
+  if (elements.contactDetailsUserQuery) {
+    elements.contactDetailsUserQuery.textContent = userFirstQuery || 'No initial message query';
+  }
+  if (elements.contactDetailsLeadId) {
+    elements.contactDetailsLeadId.textContent = lead.id || '-';
+  }
+  if (elements.contactDetailsCreatedDate) {
+    elements.contactDetailsCreatedDate.textContent = formatFullDateTime(lead.createdAt || lead.lastMessageAt);
+  }
+  if (elements.contactDetailsLastActivity) {
+    elements.contactDetailsLastActivity.textContent = formatRelativeTime(lead.lastMessageAt || lead.createdAt);
+  }
+
+  // Set Footer Metadata
+  if (elements.contactCreatedBy) {
+    elements.contactCreatedBy.textContent = lead.creatorName || (lead.platform === 'WhatsApp' ? 'WhatsApp Cloud API' : 'CRM');
+  }
+  if (elements.contactCreatedOn) {
+    elements.contactCreatedOn.textContent = formatFullDateTime(lead.createdAt || lead.lastMessageAt);
+  }
+
+  // Render Sidebar Notes Feed
+  renderContactDetailsNotesFeed(lead);
+}
+
+export function renderContactDetailsNotesFeed(lead) {
+  if (!lead || !elements.contactDetailsNotesList) return;
+
+  const notesList = getLeadNotesList(lead);
+  if (elements.contactNotesCountBadge) {
+    elements.contactNotesCountBadge.textContent = notesList.length;
+  }
+
+  if (notesList.length === 0) {
+    if (elements.contactDetailsEmptyNotes) elements.contactDetailsEmptyNotes.style.display = 'block';
+    elements.contactDetailsNotesList.innerHTML = '';
+    return;
+  }
+
+  if (elements.contactDetailsEmptyNotes) elements.contactDetailsEmptyNotes.style.display = 'none';
+
+  // Reverse so newest is at the top
+  const sortedNotes = [...notesList].reverse();
+
+  elements.contactDetailsNotesList.innerHTML = sortedNotes.map((note, idx) => {
+    const authorName = note.authorName || 'Agent';
+    const initials = getInitials(authorName);
+    const timeFormatted = formatFullDateTime(note.createdAt);
+    const relTime = formatRelativeTime(note.createdAt);
+    const isLatest = idx === 0;
+
+    return `
+      <div class="contact-note-card ${isLatest ? 'latest-note-card' : ''}">
+        <div class="note-card-top">
+          <div class="note-card-author">
+            <span class="note-card-author-avatar">${escapeHtml(initials)}</span>
+            <span>${escapeHtml(authorName)}</span>
+          </div>
+          <span class="note-card-time" title="${escapeHtml(timeFormatted)}">
+            <i class="fa-regular fa-clock"></i> ${escapeHtml(relTime)}
+          </span>
+        </div>
+        <div class="note-card-text">${escapeHtml(note.text || '')}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 export function loadMessagesForLead(leadId, renderLeadsView) {
@@ -550,7 +921,7 @@ export function update24HourWindowTimer() {
     if (expiredBanner) expiredBanner.style.display = 'none';
     if (messageInput) {
       messageInput.disabled = false;
-      messageInput.placeholder = "Type a WhatsApp message... (Enter to send, Shift+Enter for newline)";
+      messageInput.placeholder = "Type a WhatsApp message...";
     }
     if (sendBtn) sendBtn.disabled = false;
     if (attachmentBtn) attachmentBtn.disabled = false;

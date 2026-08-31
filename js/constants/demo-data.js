@@ -10,6 +10,29 @@ export const DEMO_LEADS = [
     handle: "maya.lin.design",
     phone: "+91 98765 43210",
     status: "new",
+    notes: [
+      {
+        id: "note_101",
+        text: "Customer inquired about REST API & webhook capabilities for CRM sync.",
+        authorName: "Ajay",
+        authorRole: "agent",
+        createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+      },
+      {
+        id: "note_102",
+        text: "Sent webhook integration docs. Follow-up scheduled for Friday 4 PM.",
+        authorName: "Super Admin",
+        authorRole: "admin",
+        createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+      }
+    ],
+    latestNote: {
+      id: "note_102",
+      text: "Sent webhook integration docs. Follow-up scheduled for Friday 4 PM.",
+      authorName: "Super Admin",
+      authorRole: "admin",
+      createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+    },
     firstMessage: "Hello! Does your platform provide automatic webhook syncing with our database?",
     lastMessage: "Hello! Does your platform provide automatic webhook syncing with our database?",
     lastMessageAt: new Date(Date.now() - 10 * 60 * 1000),
@@ -32,6 +55,22 @@ export const DEMO_LEADS = [
     handle: "rahul.sharma",
     phone: "+91 91234 56789",
     status: "new",
+    notes: [
+      {
+        id: "note_201",
+        text: "Interested in 3BHK luxury villas in Whitefield. Budget ~1.5 Cr.",
+        authorName: "Ajay",
+        authorRole: "agent",
+        createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+      }
+    ],
+    latestNote: {
+      id: "note_201",
+      text: "Interested in 3BHK luxury villas in Whitefield. Budget ~1.5 Cr.",
+      authorName: "Ajay",
+      authorRole: "agent",
+      createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+    },
     firstMessage: "Could you please share photographs of the ready-to-move 3BHK luxury villas?",
     lastMessage: "Could you please share photographs of the ready-to-move 3BHK luxury villas?",
     lastMessageAt: new Date(Date.now() - 2 * 3600 * 1000),
@@ -54,6 +93,22 @@ export const DEMO_LEADS = [
     handle: "taksh.sheth",
     phone: "+91 98112 23344",
     status: "contacted",
+    notes: [
+      {
+        id: "note_301",
+        text: "Sent commercial brochure via WhatsApp. Awaiting client review.",
+        authorName: "Sarah Connor",
+        authorRole: "agent",
+        createdAt: new Date(Date.now() - 5 * 86400 * 1000).toISOString()
+      }
+    ],
+    latestNote: {
+      id: "note_301",
+      text: "Sent commercial brochure via WhatsApp. Awaiting client review.",
+      authorName: "Sarah Connor",
+      authorRole: "agent",
+      createdAt: new Date(Date.now() - 5 * 86400 * 1000).toISOString()
+    },
     firstMessage: "Hi, what services and plans do you offer for commercial batch orders?",
     lastMessage: "Hi, what services and plans do you offer for commercial batch orders?",
     lastMessageAt: new Date(Date.now() - 6 * 86400 * 1000),

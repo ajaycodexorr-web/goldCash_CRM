@@ -4,7 +4,7 @@
 
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
-import { loadTeamMembers, saveTeamMembers } from './user-service.js';
+import { loadTeamMembers, saveTeamMembers, syncUsersFromFirestore } from './user-service.js';
 import { showToast } from '../utils/notifications.js';
 import { addAuditLog } from './logging-service.js';
 
@@ -46,8 +46,11 @@ export function clearAuthSession() {
   } catch (e) {}
 }
 
-export function loginUser(email, password) {
+export async function loginUser(email, password) {
   loadTeamMembers();
+  try {
+    await syncUsersFromFirestore();
+  } catch (err) {}
 
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanPass = (password || '').trim();
@@ -56,13 +59,14 @@ export function loginUser(email, password) {
     throw new Error('Please enter both Email and Password');
   }
 
-  const user = state.teamMembers.find(u => (u.email || '').toLowerCase() === cleanEmail);
+  const user = state.teamMembers.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
 
   if (!user) {
     throw new Error('Invalid Email or Password');
   }
 
-  if (user.password && user.password !== cleanPass) {
+  const storedPass = (user.password || '').trim();
+  if (storedPass && storedPass !== cleanPass && storedPass.toLowerCase() !== cleanPass.toLowerCase()) {
     throw new Error('Invalid Email or Password');
   }
 
@@ -73,7 +77,7 @@ export function loginUser(email, password) {
   // Authentication Success
   state.currentUser = user;
   saveAuthSession(user);
-  addAuditLog('user_login', '', user.name, `User ${user.name} logged into CRM as ${user.role.toUpperCase()}`);
+  addAuditLog('user_login', '', user.name, `User ${user.name} logged into CRM as ${(user.role || 'user').toUpperCase()}`);
 
   return user;
 }
@@ -120,5 +124,36 @@ export function initAuthCheck(onAuthenticated) {
   clearAuthSession();
   if (authOverlay) authOverlay.style.display = 'flex';
   if (mainApp) mainApp.style.display = 'none';
+  return false;
+}
+
+export function checkUserDisabledAndEnforceLogout() {
+  const session = getAuthSession();
+  if (!state.currentUser && !session) return false;
+
+  const currentId = state.currentUser ? state.currentUser.id : (session ? session.userId : '');
+  const currentEmail = state.currentUser ? state.currentUser.email : (session ? session.email : '');
+
+  let membersList = state.teamMembers || [];
+  try {
+    const saved = localStorage.getItem('crm_team_members_v1');
+    if (saved) {
+      membersList = JSON.parse(saved);
+    }
+  } catch (e) {}
+
+  const latest = membersList.find(u =>
+    (currentId && u.id === currentId) ||
+    (currentEmail && u.email && u.email.toLowerCase() === currentEmail.toLowerCase())
+  );
+
+  const isDisabled = (latest && latest.status === 'disabled') || (state.currentUser && state.currentUser.status === 'disabled');
+
+  if (isDisabled) {
+    logoutUser(() => {
+      showToast("Your account has been disabled by Admin.", "error");
+    });
+    return true;
+  }
   return false;
 }

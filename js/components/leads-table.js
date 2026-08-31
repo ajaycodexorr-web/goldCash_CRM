@@ -2,15 +2,17 @@
  * Leads Dashboard Table Renderer & Actions Handler
  */
 
-import { updateLeadStatus, updateLeadAssignee } from '../../firebase-config.js';
+import { updateLeadStatus, updateLeadAssignee, addLeadNote, updateLeadNotes, createNewLead, sendWhatsAppMessage } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
-import { escapeHtml, getInitials, formatFullDateTime } from '../utils/formatters.js';
+import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
 import { getUserFirstQuery } from '../utils/export-excel.js';
 import { addAuditLog } from '../services/logging-service.js';
+import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
+import { hasPermission } from '../services/user-service.js';
 
-export function setupLeadsHandlers(renderConversationsView, openLeadChat) {
+export function setupLeadsHandlers(renderConversationsView, openLeadChat, renderLeadsView) {
   // Search input
   if (elements.leadsSearchInput) {
     elements.leadsSearchInput.addEventListener('input', (e) => {
@@ -28,6 +30,224 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat) {
       renderLeadsView(renderConversationsView, openLeadChat);
     });
   });
+
+  // Open Create Lead Modal
+  if (elements.openAddLeadModalBtn) {
+    elements.openAddLeadModalBtn.addEventListener('click', () => {
+      if (!hasPermission('canAddLead')) {
+        showToast("You do not have permission to add new leads.", "warning");
+        return;
+      }
+      populateLeadAssigneeOptions();
+      if (elements.addLeadModal) elements.addLeadModal.style.display = 'flex';
+    });
+  }
+
+  // Close Create Lead Modal
+  if (elements.closeAddLeadModalBtn) {
+    elements.closeAddLeadModalBtn.addEventListener('click', () => {
+      if (elements.addLeadModal) elements.addLeadModal.style.display = 'none';
+    });
+  }
+
+  if (elements.cancelAddLeadBtn) {
+    elements.cancelAddLeadBtn.addEventListener('click', () => {
+      if (elements.addLeadModal) elements.addLeadModal.style.display = 'none';
+    });
+  }
+
+  if (elements.addLeadModal) {
+    elements.addLeadModal.addEventListener('click', (e) => {
+      if (e.target === elements.addLeadModal) elements.addLeadModal.style.display = 'none';
+    });
+  }
+
+  // Lead Notes Modal Handlers
+  if (elements.closeLeadNotesModalBtn) {
+    elements.closeLeadNotesModalBtn.addEventListener('click', () => {
+      if (elements.leadNotesModal) elements.leadNotesModal.style.display = 'none';
+    });
+  }
+
+  if (elements.cancelLeadNotesBtn) {
+    elements.cancelLeadNotesBtn.addEventListener('click', () => {
+      if (elements.leadNotesModal) elements.leadNotesModal.style.display = 'none';
+    });
+  }
+
+  if (elements.leadNotesModal) {
+    elements.leadNotesModal.addEventListener('click', (e) => {
+      if (e.target === elements.leadNotesModal) elements.leadNotesModal.style.display = 'none';
+    });
+  }
+
+  // Submit Add Note in Modal
+  if (elements.leadNotesAddForm) {
+    elements.leadNotesAddForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (checkUserDisabledAndEnforceLogout()) return;
+      const targetLeadId = state.activeNotesLeadId;
+      if (!targetLeadId) return;
+
+      const lead = state.leads.find(l => l.id === targetLeadId);
+      const newNoteText = elements.leadNotesInput ? elements.leadNotesInput.value.trim() : '';
+      if (!newNoteText) return;
+
+      const authorInfo = {
+        id: state.currentUser ? state.currentUser.id : '',
+        name: state.currentUser ? state.currentUser.name : 'Super Admin',
+        role: state.currentUser ? state.currentUser.role : 'admin'
+      };
+
+      const submitBtn = elements.saveLeadNotesSubmitBtn;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Adding...';
+      }
+
+      try {
+        let createdNote = null;
+        if (!state.demoMode) {
+          createdNote = await addLeadNote(targetLeadId, newNoteText, authorInfo);
+        } else {
+          createdNote = {
+            id: 'note_' + Date.now(),
+            text: newNoteText,
+            authorId: authorInfo.id,
+            authorName: authorInfo.name,
+            authorRole: authorInfo.role,
+            createdAt: new Date().toISOString()
+          };
+        }
+
+        if (lead) {
+          if (!Array.isArray(lead.notes)) {
+            lead.notes = getLeadNotesList(lead);
+          }
+          lead.notes.push(createdNote);
+          lead.latestNote = createdNote;
+          lead.noteUpdatedAt = createdNote.createdAt;
+        }
+
+        // Re-render notes history inside the modal
+        renderLeadNotesHistory(lead);
+
+        // Update active chat header/bar preview
+        updateActiveChatNotes(lead);
+
+        addAuditLog('note_update', targetLeadId, lead ? lead.name : targetLeadId, `Added note: "${newNoteText.substring(0, 40)}..."`);
+        showToast('Note added successfully!', 'info');
+
+        if (elements.leadNotesInput) {
+          elements.leadNotesInput.value = '';
+          elements.leadNotesInput.focus();
+        }
+
+        if (renderLeadsView) renderLeadsView(renderConversationsView, openLeadChat);
+        if (renderConversationsView) renderConversationsView();
+      } catch (err) {
+        showToast(`Failed to add note: ${err.message}`, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Add Note';
+        }
+      }
+    });
+  }
+
+  // Submit Create Lead Form
+  if (elements.createLeadForm) {
+    elements.createLeadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (checkUserDisabledAndEnforceLogout()) return;
+      const nameInput = document.getElementById('newLeadName');
+      const phoneInput = document.getElementById('newLeadPhone');
+      const platformSelect = document.getElementById('newLeadPlatform');
+      const statusSelect = document.getElementById('newLeadStatus');
+      const assigneeSelect = document.getElementById('newLeadAssignee');
+      const noteInput = document.getElementById('newLeadNote');
+
+      const name = nameInput ? nameInput.value.trim() : '';
+      const phone = phoneInput ? phoneInput.value.trim() : '';
+      const platform = 'CRM';
+      const status = statusSelect ? statusSelect.value : 'new';
+      const assigneeId = assigneeSelect ? assigneeSelect.value : '';
+      const initialNoteText = noteInput ? noteInput.value.trim() : '';
+
+      if (!name || !phone) {
+        showToast('Please enter both Customer Name and Phone Number', 'warning');
+        return;
+      }
+
+      const assignedUser = state.teamMembers ? state.teamMembers.find(u => u.id === assigneeId) : null;
+      const assigneeName = assignedUser ? assignedUser.name : 'Unassigned';
+      const creatorName = state.currentUser ? state.currentUser.name : 'Super Admin';
+
+      const initialNotesList = initialNoteText ? [
+        {
+          id: 'note_' + Date.now(),
+          text: initialNoteText,
+          authorName: creatorName,
+          authorRole: state.currentUser ? state.currentUser.role : 'admin',
+          createdAt: new Date().toISOString()
+        }
+      ] : [];
+
+      const leadPayload = {
+        name,
+        phone,
+        platform: 'CRM',
+        source: 'CRM',
+        status,
+        assigneeId: assigneeId || null,
+        assigneeName,
+        notes: initialNotesList,
+        latestNote: initialNotesList[0] || null,
+        hasWhatsAppMessages: false,
+        unreadCount: 0,
+        lastMessage: '',
+        lastMessageText: '',
+        creatorName
+      };
+
+      const submitBtn = document.getElementById('saveNewLeadSubmitBtn');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...';
+      }
+
+      try {
+        const createdDoc = await createNewLead(leadPayload);
+
+        // Deduplicate against state.leads by ID or normalized phone number
+        const normPhone = normalizePhone(phone);
+        const existingIdx = state.leads.findIndex(l => l.id === createdDoc.id || (normPhone && normalizePhone(l.phone) === normPhone));
+        if (existingIdx !== -1) {
+          state.leads[existingIdx] = { ...state.leads[existingIdx], ...createdDoc };
+        } else {
+          state.leads.unshift(createdDoc);
+        }
+        state.knownLeadIds.add(createdDoc.id);
+
+        addAuditLog('create_lead', createdDoc.id, name, `Created new lead ${name} (${phone})`);
+        showToast(`New lead "${name}" created successfully!`, 'info');
+
+        if (elements.addLeadModal) elements.addLeadModal.style.display = 'none';
+        if (elements.createLeadForm) elements.createLeadForm.reset();
+
+        renderLeadsView(renderConversationsView, openLeadChat);
+        if (renderConversationsView) renderConversationsView();
+      } catch (err) {
+        showToast(`Failed to create lead: ${err.message}`, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="fa-solid fa-check"></i> Create Lead';
+        }
+      }
+    });
+  }
 
   // Delete Confirmation Modal
   if (elements.closeDeleteModalBtn) {
@@ -87,13 +307,42 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat) {
   }
 }
 
+function populateLeadAssigneeOptions() {
+  const assigneeSelect = document.getElementById('newLeadAssignee');
+  if (!assigneeSelect) return;
+
+  const teamMembers = state.teamMembers || [];
+  assigneeSelect.innerHTML = `
+    <option value="" selected>Unassigned</option>
+    ${teamMembers.map(user => `
+      <option value="${user.id}">
+        ${user.role === 'super_admin' || user.role === 'admin' || user.role === 'sub_admin' ? '🛡️' : '👤'} ${escapeHtml(user.name)} (${(user.role || 'maker').toUpperCase()})
+      </option>
+    `).join('')}
+  `;
+}
+
 export function renderLeadsView(renderConversationsView, openLeadChat) {
   const { leads, leadsSearchQuery, leadsFilter, currentUser, teamMembers } = state;
-  const isAgent = currentUser && currentUser.role === 'agent';
+  const isAgent = currentUser && (currentUser.role === 'agent' || currentUser.role === 'maker');
   const isDisabledUser = currentUser && currentUser.status === 'disabled';
 
-  // Filter leads: Customer-initiated leads ONLY (isLead === true)
-  let leadsOnly = leads.filter(l => l.isLead === true || (l.isLead !== false && l.initiatedBy !== 'crm' && l.category !== 'conversation'));
+  // Deduplicate leads by id and normalized clean phone number
+  const uniqueMap = new Map();
+  leads.forEach(l => {
+    const normP = normalizePhone(l.phone);
+    const key = normP ? `phone_${normP}` : l.id;
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, l);
+    } else {
+      const existing = uniqueMap.get(key);
+      uniqueMap.set(key, { ...existing, ...l, name: (l.name && l.name !== l.phone) ? l.name : existing.name });
+    }
+  });
+  const deduplicatedLeads = Array.from(uniqueMap.values());
+
+  // Filter leads: Customer-initiated or manually created CRM leads (isLead !== false)
+  let leadsOnly = deduplicatedLeads.filter(l => l.isLead !== false && l.category !== 'conversation');
 
   // Strict Agent Filter: Agents ONLY see leads assigned to them ("Show only assign")
   if (isAgent) {
@@ -189,20 +438,27 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
 
   // Render Lead Cards matching UI design
   elements.leadsCardsList.innerHTML = pageRecords.map(lead => {
-    const displayName = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+    const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+    const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
     const subtitle = lead.company || '';
-    const handle = lead.handle || lead.phone || lead.id;
+    const handle = formatDisplayPhone(lead.handle || lead.phone || lead.id);
     const userFirstQuery = getUserFirstQuery(lead);
     const createdDateTime = formatFullDateTime(lead.createdAt || lead.lastMessageAt);
     const currentStatus = (lead.status || 'new').toLowerCase();
     const isDeleted = currentStatus === 'deleted';
     const currentAssigneeId = lead.assigneeId || '';
     const currentAssigneeName = lead.assigneeName || 'Unassigned';
+    const notesList = getLeadNotesList(lead);
+    const latestNote = getLatestLeadNote(lead);
+    const latestNoteText = latestNote ? latestNote.text : '';
+    const latestAuthor = latestNote ? latestNote.authorName || 'Agent' : '';
+    const latestTime = latestNote ? formatRelativeTime(latestNote.createdAt) : '';
+    const noteTooltip = latestNote ? `Latest by ${latestAuthor} (${latestTime}):\n${latestNoteText}` : 'Click to view note history & add note';
 
     return `
       <div class="lead-card-row ${isDisabledUser ? 'row-disabled' : ''}" data-lead-id="${escapeHtml(lead.id)}">
         <!-- 1. Name -->
-        <div class="lead-profile-col">
+        <div class="lead-profile-col" style="cursor: pointer;" title="Open chat with ${escapeHtml(displayName)}">
           <div class="lead-name-box">
             <span class="lead-name-title" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
             ${subtitle ? `<span class="lead-subtitle" title="${escapeHtml(subtitle)}">${escapeHtml(subtitle)}</span>` : ''}
@@ -215,7 +471,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
         </div>
 
         <!-- 3. User Query -->
-        <div class="lead-message-col">
+        <div class="lead-message-col" style="cursor: pointer;" title="Open chat with ${escapeHtml(displayName)}">
           <div class="lead-quote-bubble" title="${escapeHtml(userFirstQuery)}">
             ${escapeHtml(userFirstQuery)}
           </div>
@@ -223,13 +479,17 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
 
         <!-- 4. Platform -->
         <div class="lead-channel-col">
-          <span class="channel-pill whatsapp"><i class="fa-brands fa-whatsapp"></i> WhatsApp</span>
+          ${((lead.platform || lead.source || '').toUpperCase() === 'CRM') ? `
+            <span class="channel-pill crm"><i class="fa-solid fa-laptop"></i> CRM</span>
+          ` : `
+            <span class="channel-pill whatsapp"><i class="fa-brands fa-whatsapp"></i> WhatsApp</span>
+          `}
         </div>
 
         <!-- 5. Assigned -->
         <div class="lead-assignee-col">
-          ${isAgent ? `
-            <span class="assignee-badge-pill" title="Assigned Agent: ${escapeHtml(currentAssigneeName)}">
+          ${(!hasPermission('canAssignLead') || isAgent) ? `
+            <span class="assignee-badge-pill" title="Assigned: ${escapeHtml(currentAssigneeName)}">
               <i class="fa-solid fa-user-check"></i> ${escapeHtml(currentAssigneeName)}
             </span>
           ` : `
@@ -244,7 +504,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
           `}
         </div>
 
-        <!-- 5. Status -->
+        <!-- 6. Status -->
         <div class="lead-status-col">
           <select class="lead-status-select status-${currentStatus}" data-lead-id="${escapeHtml(lead.id)}" ${isDeleted || isDisabledUser ? 'disabled' : ''}>
             ${isDeleted ? `<option value="deleted" selected disabled>Deleted</option>` : ''}
@@ -257,14 +517,26 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
           </select>
         </div>
 
-        <!-- 6. Created Date with Time -->
+        <!-- 7. Notes -->
+        <div class="lead-notes-col">
+          <div class="lead-note-badge ${latestNoteText ? 'has-note' : 'no-note'}" data-lead-id="${escapeHtml(lead.id)}" title="${escapeHtml(noteTooltip)}">
+            <i class="fa-regular fa-note-sticky note-icon"></i>
+            <span class="note-text">${escapeHtml(latestNoteText || '+ Add note')}</span>
+            ${notesList.length > 1 ? `<span class="note-count-pill" title="${notesList.length} total notes">${notesList.length}</span>` : ''}
+            <button type="button" class="btn-note-edit" data-lead-id="${escapeHtml(lead.id)}" title="View notes history & add note">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 8. Created Date with Time -->
         <div class="lead-time-col">
           <span>${createdDateTime}</span>
         </div>
 
-        <!-- 7. Action -->
+        <!-- 9. Action -->
         <div class="lead-actions-col">
-          ${isDeleted || isDisabledUser ? '' : `
+          ${(isDeleted || isDisabledUser || !hasPermission('canDeleteLead')) ? '' : `
             <button class="btn-lead-delete" data-action="delete" data-lead-id="${escapeHtml(lead.id)}" title="Delete lead">
               <i class="fa-regular fa-trash-can"></i>
             </button>
@@ -284,6 +556,26 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
       }
       const leadId = btn.dataset.leadId;
       handleDeleteLead(leadId);
+    });
+  });
+
+  // Note Badge Click Listeners
+  elements.leadsCardsList.querySelectorAll('.lead-note-badge').forEach(badge => {
+    badge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const leadId = badge.dataset.leadId;
+      openLeadNotesModal(leadId, renderLeadsView, renderConversationsView, openLeadChat);
+    });
+  });
+
+  // Row Profile / Query Click to open chat
+  elements.leadsCardsList.querySelectorAll('.lead-profile-col, .lead-message-col').forEach(col => {
+    col.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const row = col.closest('.lead-card-row');
+      if (row && row.dataset.leadId && openLeadChat) {
+        openLeadChat(row.dataset.leadId);
+      }
     });
   });
 
@@ -348,7 +640,124 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
   renderLeadsPagination(totalRecords, totalPages, renderConversationsView, openLeadChat);
 }
 
+export function renderLeadNotesHistory(lead) {
+  if (!lead || !elements.leadNotesHistoryList) return;
+
+  const notesList = getLeadNotesList(lead);
+  const totalCount = notesList.length;
+
+  if (elements.leadNotesCount) {
+    elements.leadNotesCount.textContent = totalCount;
+  }
+
+  if (totalCount === 0) {
+    if (elements.leadNotesEmptyHistory) elements.leadNotesEmptyHistory.style.display = 'block';
+    elements.leadNotesHistoryList.innerHTML = '';
+    return;
+  }
+
+  if (elements.leadNotesEmptyHistory) elements.leadNotesEmptyHistory.style.display = 'none';
+
+  // Show newest notes at the top
+  const sortedNotes = [...notesList].reverse();
+
+  elements.leadNotesHistoryList.innerHTML = sortedNotes.map((note, idx) => {
+    const authorName = note.authorName || 'Agent';
+    const authorRole = note.authorRole || (authorName.toLowerCase().includes('admin') ? 'admin' : 'agent');
+    const initials = getInitials(authorName);
+    const timeFormatted = formatFullDateTime(note.createdAt);
+    const relTime = formatRelativeTime(note.createdAt);
+    const isLatest = idx === 0;
+
+    return `
+      <div class="note-history-item ${isLatest ? 'latest-note-item' : ''}">
+        <div class="note-history-top">
+          <div class="note-author-block">
+            <div class="note-author-avatar" title="${escapeHtml(authorName)}">${escapeHtml(initials)}</div>
+            <span class="note-author-name">${escapeHtml(authorName)}</span>
+            <span class="note-author-badge">${escapeHtml(authorRole)}</span>
+            ${isLatest ? `<span style="font-size: 10px; font-weight: 700; color: var(--crm-primary); background: #dbeafe; padding: 1px 5px; border-radius: 4px;">Latest</span>` : ''}
+          </div>
+          <span class="note-history-time" title="${escapeHtml(timeFormatted)}">
+            <i class="fa-regular fa-clock"></i> ${escapeHtml(relTime)}
+          </span>
+        </div>
+        <div class="note-history-body">${escapeHtml(note.text || '')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+export function updateActiveChatNotes(lead) {
+  if (!lead) return;
+  const latestNote = getLatestLeadNote(lead);
+  const notesList = getLeadNotesList(lead);
+
+  if (elements.chatNotePreviewText) {
+    if (latestNote && latestNote.text) {
+      const author = latestNote.authorName || 'Agent';
+      const relTime = formatRelativeTime(latestNote.createdAt);
+      elements.chatNotePreviewText.innerHTML = `<strong>${escapeHtml(latestNote.text)}</strong> <span style="font-size: 11.5px; opacity: 0.85; margin-left: 6px; font-weight: normal;">(by ${escapeHtml(author)} • ${escapeHtml(relTime)}${notesList.length > 1 ? ` • ${notesList.length} notes total` : ''})</span>`;
+      elements.chatNotePreviewText.style.fontStyle = 'normal';
+      elements.chatNotePreviewText.style.color = '#78350f';
+    } else {
+      elements.chatNotePreviewText.textContent = 'No note added yet';
+      elements.chatNotePreviewText.style.fontStyle = 'italic';
+      elements.chatNotePreviewText.style.color = '#94a3b8';
+    }
+  }
+
+  if (elements.chatAddNoteBtnText) {
+    elements.chatAddNoteBtnText.textContent = 'Add Note';
+  }
+}
+
+export function openLeadNotesModal(leadId, renderLeadsView, renderConversationsView, openLeadChat) {
+  if (checkUserDisabledAndEnforceLogout()) return;
+
+  const lead = state.leads.find(l => l.id === leadId);
+  if (!lead) return;
+
+  state.activeNotesLeadId = leadId;
+
+  const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
+  const phoneDisplay = formatDisplayPhone(lead.phone || lead.id);
+
+  if (elements.leadNotesModalTitle) {
+    elements.leadNotesModalTitle.textContent = `Notes History — ${displayName}`;
+  }
+  if (elements.leadNotesModalSubtitle) {
+    elements.leadNotesModalSubtitle.textContent = `Phone: ${phoneDisplay}`;
+  }
+
+  // Clear input box so user can type a fresh note
+  if (elements.leadNotesInput) {
+    elements.leadNotesInput.value = '';
+  }
+
+  // Render past notes history listing
+  renderLeadNotesHistory(lead);
+
+  if (elements.leadNotesModal) {
+    elements.leadNotesModal.style.display = 'flex';
+  }
+
+  setTimeout(() => {
+    if (elements.leadNotesInput) {
+      elements.leadNotesInput.focus();
+    }
+  }, 100);
+}
+
 export function handleDeleteLead(leadId) {
+  if (checkUserDisabledAndEnforceLogout()) return;
+
+  if (!hasPermission('canDeleteLead')) {
+    showToast("Permission denied: You do not have permission to delete leads.", "warning");
+    return;
+  }
+
   state.pendingDeleteLeadId = leadId;
   const lead = state.leads.find(l => l.id === leadId);
   if (elements.deleteLeadTargetName) {

@@ -22,7 +22,7 @@ export function setupLoginView(onSuccessLogin) {
   }
 
   if (loginForm) {
-    loginForm.addEventListener('submit', (e) => {
+    loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (errorAlert) errorAlert.style.display = 'none';
 
@@ -34,33 +34,31 @@ export function setupLoginView(onSuccessLogin) {
         submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing In...';
       }
 
-      setTimeout(() => {
-        try {
-          const user = loginUser(email, password);
-          if (errorAlert) errorAlert.style.display = 'none';
+      try {
+        const user = await loginUser(email, password);
+        if (errorAlert) errorAlert.style.display = 'none';
 
-          const authOverlay = document.getElementById('authOverlay');
-          const mainApp = document.querySelector('.app-container');
+        const authOverlay = document.getElementById('authOverlay');
+        const mainApp = document.querySelector('.app-container');
 
-          if (authOverlay) authOverlay.style.display = 'none';
-          if (mainApp) mainApp.style.display = 'flex';
+        if (authOverlay) authOverlay.style.display = 'none';
+        if (mainApp) mainApp.style.display = 'flex';
 
-          showToast(`Welcome back, ${user.name}!`, 'info');
+        showToast(`Welcome back, ${user.name}!`, 'info');
 
-          if (onSuccessLogin) onSuccessLogin(user);
-        } catch (err) {
-          if (errorAlert) {
-            errorAlert.textContent = err.message || 'Login failed';
-            errorAlert.style.display = 'block';
-          }
-          showToast(err.message || 'Login failed', 'error');
-        } finally {
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = 'Sign In to CRM <i class="fa-solid fa-arrow-right"></i>';
-          }
+        if (onSuccessLogin) onSuccessLogin(user);
+      } catch (err) {
+        if (errorAlert) {
+          errorAlert.textContent = err.message || 'Login failed';
+          errorAlert.style.display = 'block';
         }
-      }, 300);
+        showToast(err.message || 'Login failed', 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = 'Sign In to CRM <i class="fa-solid fa-arrow-right"></i>';
+        }
+      }
     });
   }
 }

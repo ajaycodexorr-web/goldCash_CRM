@@ -4,7 +4,7 @@
 
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
-import { escapeHtml, formatFullDateTime } from '../utils/formatters.js';
+import { escapeHtml, formatFullDateTime, formatDisplayPhone } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
 import { saveLogsToLocalStorage, updateLogsBadge, getLogCategory } from '../services/logging-service.js';
 
@@ -96,7 +96,11 @@ export function renderLogsView() {
           ${pillHtml}
         </div>
         <div class="col-log-lead">
-          <strong title="${escapeHtml(log.leadName)}">${escapeHtml(log.leadName)}</strong>
+          ${(() => {
+            const raw = log.leadName || '';
+            const disp = (/^\+?\d[\d\s\-()]+$/.test(raw)) ? formatDisplayPhone(raw) : raw;
+            return `<strong title="${escapeHtml(disp)}">${escapeHtml(disp)}</strong>`;
+          })()}
         </div>
         <div class="col-log-performer">
           <span class="log-performer-badge"><i class="fa-solid fa-user-check"></i> ${escapeHtml(log.performedBy || 'Admin User')}</span>
