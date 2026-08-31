@@ -151,14 +151,23 @@ function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsV
       }
 
       leadsList.forEach(lead => {
-        const isCustomerLead = lead.isLead !== false && lead.initiatedBy !== 'crm';
+        const isCrmInitiated = (lead.platform || lead.source || '').toUpperCase() === 'CRM' || 
+                               lead.initiatedBy === 'crm' || 
+                               lead.createdBy === 'crm' ||
+                               lead.creatorRole === 'admin' ||
+                               lead.creatorRole === 'agent' ||
+                               lead.creatorRole === 'maker';
+        const isCustomerLead = lead.isLead !== false && !isCrmInitiated;
         const isNewDoc = !state.knownLeadIds.has(lead.id);
         const lastMsgKey = String(lead.lastMessageAt || lead.lastMessage || lead.updatedAt || '');
         const prevMsgKey = state.knownLeadMessages ? state.knownLeadMessages.get(lead.id) : null;
         const hasNewMessage = prevMsgKey !== undefined && prevMsgKey !== null && prevMsgKey !== lastMsgKey && lastMsgKey !== '';
+        const isOutgoing = (lead.lastMessageDirection || lead.direction || '').toLowerCase() === 'outgoing' ||
+                           (lead.lastMessageDirection || lead.direction || '').toLowerCase() === 'outbound';
 
-        if (!isInitial && (isNewDoc || hasNewMessage) && isCustomerLead) {
-          console.log(`🔔 [Notification] New incoming lead / message from ${lead.name || lead.phone} (${lead.id})`);
+        // 1. "New Lead Received" popup banner & Desktop notification ONLY for genuinely new incoming customer leads
+        if (!isInitial && isNewDoc && isCustomerLead && !isOutgoing) {
+          console.log(`🔔 [Notification] New incoming lead received from ${lead.name || lead.phone} (${lead.id})`);
           playNotificationPing();
           addLeadNotification(lead);
           showNewLeadNotificationBanner(lead, (targetLead) => {
@@ -169,6 +178,10 @@ function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsV
             if (switchView) switchView('leads');
             if (highlightLeadCard) highlightLeadCard(targetLead.id);
           });
+        } else if (!isInitial && !isNewDoc && hasNewMessage && !isOutgoing && isCustomerLead) {
+          // 2. For new incoming customer replies on existing conversations: update notification bell & sound without false "New Lead" banner
+          playNotificationPing();
+          addLeadNotification(lead);
         }
 
         state.knownLeadIds.add(lead.id);
