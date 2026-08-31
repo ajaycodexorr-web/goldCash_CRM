@@ -6,27 +6,85 @@ import { elements } from '../dom/elements.js';
 import { escapeHtml, formatDisplayPhone } from './formatters.js';
 import { global_settings_CRM } from '../constants/global-settings.js';
 
-export function playNotificationPing() {
+let sharedAudioContext = null;
+
+function getAudioContext() {
+  if (!sharedAudioContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      sharedAudioContext = new AudioContextClass();
+    }
+  }
+  if (sharedAudioContext && sharedAudioContext.state === 'suspended') {
+    sharedAudioContext.resume().catch(() => {});
+  }
+  return sharedAudioContext;
+}
+
+/**
+ * Play distinct, loud, and crystal-clear notification chimes
+ * @param {'lead'|'message'|'default'} type
+ */
+export function playNotificationPing(type = 'default') {
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+    const ctx = getAudioContext();
+    if (!ctx) return;
 
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
+    const now = ctx.currentTime;
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.85, now); // Loud, clear volume
+    masterGain.connect(ctx.destination);
 
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
-    osc1.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+    if (type === 'lead') {
+      // 3-tone ascending grand chime for New Lead: C5 (523Hz) -> E5 (659Hz) -> G5 (784Hz) -> C6 (1046Hz)
+      const notes = [
+        { freq: 523.25, start: 0.00, dur: 0.12 },
+        { freq: 659.25, start: 0.10, dur: 0.14 },
+        { freq: 783.99, start: 0.20, dur: 0.16 },
+        { freq: 1046.50, start: 0.32, dur: 0.45 }
+      ];
 
-    gain1.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      notes.forEach(note => {
+        const osc = ctx.createOscillator();
+        const noteGain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(note.freq, now + note.start);
 
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
+        noteGain.gain.setValueAtTime(0, now + note.start);
+        noteGain.gain.linearRampToValueAtTime(0.8, now + note.start + 0.02);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, now + note.start + note.dur);
 
-    osc1.start();
-    osc1.stop(ctx.currentTime + 0.35);
+        osc.connect(noteGain);
+        noteGain.connect(masterGain);
+
+        osc.start(now + note.start);
+        osc.stop(now + note.start + note.dur);
+      });
+    } else {
+      // 2-tone melodic chime for New Message: F5 (698Hz) -> A5 (880Hz) -> C6 (1046Hz)
+      const notes = [
+        { freq: 698.46, start: 0.00, dur: 0.12 },
+        { freq: 880.00, start: 0.10, dur: 0.14 },
+        { freq: 1046.50, start: 0.22, dur: 0.38 }
+      ];
+
+      notes.forEach(note => {
+        const osc = ctx.createOscillator();
+        const noteGain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(note.freq, now + note.start);
+
+        noteGain.gain.setValueAtTime(0, now + note.start);
+        noteGain.gain.linearRampToValueAtTime(0.75, now + note.start + 0.02);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, now + note.start + note.dur);
+
+        osc.connect(noteGain);
+        noteGain.connect(masterGain);
+
+        osc.start(now + note.start);
+        osc.stop(now + note.start + note.dur);
+      });
+    }
   } catch (err) {
     console.warn("Could not play audio notification ping:", err);
   }
@@ -42,19 +100,22 @@ export function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), 3500);
 }
 
+/**
+ * Popup banner for a brand new WhatsApp Lead
+ */
 export function showNewLeadNotificationBanner(lead, onViewClick) {
   const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
   const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
-  const snippet = lead.lastMessage ? lead.lastMessage.substring(0, 50) : 'New customer message received';
+  const snippet = lead.lastMessage || lead.firstMessage || lead.query || 'New customer inquiry received';
 
   const banner = document.createElement('div');
-  banner.className = 'new-lead-banner-notification';
+  banner.className = 'new-lead-banner-notification new-lead';
   banner.innerHTML = `
-    <div class="banner-icon-box"><i class="fa-solid fa-coins"></i></div>
+    <div class="banner-icon-box lead-icon"><i class="fa-solid fa-user-plus"></i></div>
     <div class="banner-content-box">
       <strong>🔔 New Lead Received!</strong>
       <span class="banner-lead-name">${escapeHtml(displayName)}</span>
-      <span class="banner-lead-snippet">"${escapeHtml(snippet)}"</span>
+      <span class="banner-lead-snippet">"${escapeHtml(snippet.substring(0, 55))}"</span>
     </div>
     <button class="banner-view-btn">View Lead</button>
     <button class="banner-close-btn">&times;</button>
@@ -78,15 +139,58 @@ export function showNewLeadNotificationBanner(lead, onViewClick) {
   }, 8000);
 }
 
-export function triggerDesktopNotification(lead, onClick) {
+/**
+ * Popup banner for an incoming message on existing conversation
+ */
+export function showNewMessageNotificationBanner(lead, onViewClick) {
+  const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
+  const snippet = lead.lastMessage || lead.lastMessageText || 'New WhatsApp message received';
+
+  const banner = document.createElement('div');
+  banner.className = 'new-lead-banner-notification new-message';
+  banner.innerHTML = `
+    <div class="banner-icon-box msg-icon"><i class="fa-brands fa-whatsapp"></i></div>
+    <div class="banner-content-box">
+      <strong style="color: #38bdf8;">💬 New WhatsApp Message</strong>
+      <span class="banner-lead-name">${escapeHtml(displayName)}</span>
+      <span class="banner-lead-snippet">"${escapeHtml(snippet.substring(0, 55))}"</span>
+    </div>
+    <button class="banner-view-btn msg-btn">View Chat</button>
+    <button class="banner-close-btn">&times;</button>
+  `;
+
+  banner.querySelector('.banner-view-btn').addEventListener('click', () => {
+    if (onViewClick) onViewClick(lead);
+    banner.remove();
+  });
+
+  banner.querySelector('.banner-close-btn').addEventListener('click', () => {
+    banner.remove();
+  });
+
+  if (elements.toastContainer) {
+    elements.toastContainer.appendChild(banner);
+  }
+
+  setTimeout(() => {
+    if (banner.parentElement) banner.remove();
+  }, 8000);
+}
+
+/**
+ * Trigger browser desktop notification for lead or message
+ */
+export function triggerDesktopNotification(lead, onClick, type = 'lead') {
   if (!("Notification" in window)) return;
 
   const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
   const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
-  const snippet = lead.lastMessage || 'New WhatsApp Lead';
+  const snippet = lead.lastMessage || (type === 'lead' ? 'New WhatsApp Lead' : 'New WhatsApp message received');
+  const title = type === 'lead' ? `🔔 New Lead: ${displayName}` : `💬 New Message from ${displayName}`;
 
   if (Notification.permission === "granted") {
-    const notif = new Notification(`🔔 New Lead: ${displayName}`, {
+    const notif = new Notification(title, {
       body: snippet,
       icon: global_settings_CRM.projectIcon || 'goldCash-logo.svg'
     });
@@ -97,7 +201,7 @@ export function triggerDesktopNotification(lead, onClick) {
   } else if (Notification.permission !== "denied") {
     Notification.requestPermission().then(permission => {
       if (permission === "granted") {
-        triggerDesktopNotification(lead, onClick);
+        triggerDesktopNotification(lead, onClick, type);
       }
     });
   }

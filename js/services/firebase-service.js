@@ -6,7 +6,7 @@ import { initializeFirebase, subscribeToLeads, subscribeToActivityLogs, subscrib
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { DEMO_LEADS } from '../constants/demo-data.js';
-import { playNotificationPing, showNewLeadNotificationBanner, triggerDesktopNotification, showToast } from '../utils/notifications.js';
+import { playNotificationPing, showNewLeadNotificationBanner, showNewMessageNotificationBanner, triggerDesktopNotification, showToast } from '../utils/notifications.js';
 import { addLeadNotification, initLeadNotifications } from '../components/notifications-dropdown.js';
 import { saveLogsToLocalStorage, updateLogsBadge } from './logging-service.js';
 import { normalizePhone } from '../utils/formatters.js';
@@ -165,11 +165,11 @@ function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsV
         const isOutgoing = (lead.lastMessageDirection || lead.direction || '').toLowerCase() === 'outgoing' ||
                            (lead.lastMessageDirection || lead.direction || '').toLowerCase() === 'outbound';
 
-        // 1. "New Lead Received" popup banner & Desktop notification ONLY for genuinely new incoming customer leads
+        // 1. "New Lead Received" popup banner, sound & Desktop notification ONLY for genuinely new incoming customer leads
         if (!isInitial && isNewDoc && isCustomerLead && !isOutgoing) {
           console.log(`🔔 [Notification] New incoming lead received from ${lead.name || lead.phone} (${lead.id})`);
-          playNotificationPing();
-          addLeadNotification(lead);
+          playNotificationPing('lead');
+          addLeadNotification(lead, 'lead');
           showNewLeadNotificationBanner(lead, (targetLead) => {
             if (switchView) switchView('leads');
             if (highlightLeadCard) highlightLeadCard(targetLead.id);
@@ -177,11 +177,26 @@ function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsV
           triggerDesktopNotification(lead, (targetLead) => {
             if (switchView) switchView('leads');
             if (highlightLeadCard) highlightLeadCard(targetLead.id);
-          });
+          }, 'lead');
         } else if (!isInitial && !isNewDoc && hasNewMessage && !isOutgoing && isCustomerLead) {
-          // 2. For new incoming customer replies on existing conversations: update notification bell & sound without false "New Lead" banner
-          playNotificationPing();
-          addLeadNotification(lead);
+          // 2. For incoming customer replies on existing conversations: show New Message notification banner, sound & update dropdown
+          console.log(`💬 [Notification] New incoming message from ${lead.name || lead.phone} (${lead.id})`);
+          playNotificationPing('message');
+          addLeadNotification(lead, 'message');
+          showNewMessageNotificationBanner(lead, (targetLead) => {
+            if (switchView) switchView('conversations');
+            if (window.selectLead) {
+              window.selectLead(targetLead.id);
+            } else if (highlightLeadCard) {
+              highlightLeadCard(targetLead.id);
+            }
+          });
+          triggerDesktopNotification(lead, (targetLead) => {
+            if (switchView) switchView('conversations');
+            if (window.selectLead) {
+              window.selectLead(targetLead.id);
+            }
+          }, 'message');
         }
 
         state.knownLeadIds.add(lead.id);

@@ -200,23 +200,30 @@ export function initLeadNotifications(leads = []) {
 }
 
 /**
- * Add a new Lead Notification when a lead arrives
- * Formatted as: "New lead {Phone number}"
+ * Add a notification when a new lead or message arrives
+ * @param {Object} lead
+ * @param {'lead'|'message'} type
  */
-export function addLeadNotification(lead) {
+export function addLeadNotification(lead, type = 'lead') {
   if (!lead) return;
 
   const rawPhone = lead.phone || lead.id || '';
   const displayPhone = (/^\+?\d[\d\s\-()]+$/.test(rawPhone)) ? formatDisplayPhone(rawPhone) : rawPhone;
   const leadName = (lead.name && lead.name.trim() && !/^\+?\d[\d\s\-()]+$/.test(lead.name.trim())) ? lead.name.trim() : '';
   
-  // Format title as "New lead {Phone number}" or with name if present
-  const title = leadName ? `New lead ${displayPhone} (${leadName})` : `New lead ${displayPhone}`;
-  const messageSnippet = lead.query || lead.lastMessage || lead.firstMessage || lead._firstUserMsg || 'New inquiry received on WhatsApp';
+  let title = '';
+  if (type === 'message') {
+    title = leadName ? `💬 New message from ${leadName}` : `💬 New message from ${displayPhone}`;
+  } else {
+    title = leadName ? `🔔 New lead: ${leadName} (${displayPhone})` : `🔔 New lead: ${displayPhone}`;
+  }
+
+  const messageSnippet = lead.lastMessage || lead.lastMessageText || lead.query || lead.firstMessage || lead._firstUserMsg || (type === 'message' ? 'New incoming WhatsApp message' : 'New inquiry received on WhatsApp');
 
   const newNotif = {
-    id: `notif_${lead.id || Date.now()}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+    id: `notif_${type}_${lead.id || Date.now()}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
     leadId: lead.id,
+    type: type,
     phone: displayPhone,
     title: title,
     snippet: messageSnippet,
@@ -319,7 +326,7 @@ export function renderNotificationList() {
           <i class="fa-regular fa-bell-slash"></i>
         </div>
         <p class="notif-empty-title">No notifications yet</p>
-        <span class="notif-empty-subtitle">New incoming leads will appear here</span>
+        <span class="notif-empty-subtitle">New incoming leads and customer messages will appear here</span>
       </div>
     `;
     return;
@@ -328,11 +335,12 @@ export function renderNotificationList() {
   listContainer.innerHTML = notifications.map(n => {
     const isUnread = !n.isRead;
     const timeFormatted = formatRelativeTime(n.timestamp);
+    const isMessage = n.type === 'message';
 
     return `
-      <div class="notif-item ${isUnread ? 'unread' : ''}" data-id="${escapeHtml(n.id)}" data-lead-id="${escapeHtml(n.leadId)}">
-        <div class="notif-item-icon">
-          <i class="fa-brands fa-whatsapp"></i>
+      <div class="notif-item ${isUnread ? 'unread' : ''} ${isMessage ? 'notif-message-type' : 'notif-lead-type'}" data-id="${escapeHtml(n.id)}" data-lead-id="${escapeHtml(n.leadId)}">
+        <div class="notif-item-icon ${isMessage ? 'icon-message' : 'icon-lead'}">
+          ${isMessage ? '<i class="fa-brands fa-whatsapp"></i>' : '<i class="fa-solid fa-user-plus"></i>'}
         </div>
         <div class="notif-item-body">
           <div class="notif-item-header">
@@ -340,6 +348,11 @@ export function renderNotificationList() {
             <span class="notif-item-time">${escapeHtml(timeFormatted)}</span>
           </div>
           <p class="notif-item-snippet">${escapeHtml(n.snippet)}</p>
+          <div class="notif-tag-row">
+            <span class="notif-type-pill ${isMessage ? 'pill-msg' : 'pill-lead'}">
+              ${isMessage ? '<i class="fa-regular fa-comment-dots"></i> Message' : '<i class="fa-solid fa-sparkles"></i> New Lead'}
+            </span>
+          </div>
         </div>
         ${isUnread ? '<span class="notif-unread-dot" title="Unread"></span>' : ''}
       </div>

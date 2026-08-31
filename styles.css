@@ -4833,8 +4833,18 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
   flex-shrink: 0;
+}
+
+.notif-item-icon.icon-message {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.notif-item-icon.icon-lead {
+  background: #dcfce7;
+  color: #16a34a;
 }
 
 .notif-item-body {
@@ -4876,6 +4886,34 @@ html, body {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.notif-tag-row {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+}
+
+.notif-type-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.notif-type-pill.pill-msg {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.notif-type-pill.pill-lead {
+  background: #dcfce7;
+  color: #15803d;
 }
 
 .notif-unread-dot {

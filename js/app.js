@@ -114,9 +114,13 @@ document.addEventListener('DOMContentLoaded', () => {
   setupLightboxHandlers();
   setupLogsHandlers();
   setupExportHandlers();
-  setupNotificationDropdown((leadId) => {
-    handleSwitchView('leads');
-    highlightLeadCard(leadId);
+  setupNotificationDropdown((leadId, type) => {
+    if (type === 'message') {
+      handleOpenLeadChat(leadId);
+    } else {
+      handleSwitchView('leads');
+      highlightLeadCard(leadId);
+    }
   });
   setupConfigModalHandlers(handleRenderLeads, handleSwitchView);
 });
