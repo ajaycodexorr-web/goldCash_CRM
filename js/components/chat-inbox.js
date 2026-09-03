@@ -2,14 +2,14 @@
  * Team Inbox Conversations List & Active Chat Pane Controller
  */
 
-import { subscribeToMessages, markLeadAsRead, resolveWhatsAppMediaUrl, addLeadNote, updateLeadStatus, updateLeadAssignee } from '../../firebase-config.js';
+import { subscribeToMessages, markLeadAsRead, resolveWhatsAppMediaUrl, addLeadNote, updateLeadStatus, updateLeadAssignee, updateLeadBranch } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, formatTimeOnly, parseDate, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote, hasWhatsAppConversation } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
 import { clearAllStagedAttachments, autoResizeTextarea, updateComposerDisabledState } from './composer.js';
 import { openLightbox } from './lightbox.js';
-import { handleDeleteLead, openLeadNotesModal, updateActiveChatNotes, renderLeadNotesHistory } from './leads-table.js';
+import { handleDeleteLead, openLeadNotesModal, updateActiveChatNotes, renderLeadNotesHistory, BRANCH_LIST } from './leads-table.js';
 import { getUserFirstQuery } from '../utils/export-excel.js';
 import { addAuditLog } from '../services/logging-service.js';
 import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
@@ -149,6 +149,38 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
 
       addAuditLog('assignee_change', leadId, lead ? lead.name : leadId, `Assigned owner changed to ${assigneeName}`);
       showToast(`Assigned owner changed to ${assigneeName}`, 'info');
+      if (renderLeadsView) renderLeadsView(renderConversationsView);
+      renderConversationsView();
+    });
+  }
+
+  // Sidebar Branch Select Change
+  if (elements.contactDetailsBranchSelect) {
+    elements.contactDetailsBranchSelect.addEventListener('change', async (e) => {
+      if (checkUserDisabledAndEnforceLogout()) return;
+      const newBranch = e.target.value.trim() || null;
+      const leadId = state.activeLeadId;
+      if (!leadId) return;
+
+      const lead = state.leads.find(l => l.id === leadId);
+      const performerName = state.currentUser ? state.currentUser.name : 'Super Admin';
+
+      if (lead) {
+        lead.branch = newBranch;
+        lead.branchUpdatedAt = new Date().toISOString();
+        lead.branchUpdatedBy = performerName;
+      }
+
+      if (!state.demoMode) {
+        try {
+          await updateLeadBranch(leadId, newBranch, performerName);
+        } catch (err) {
+          console.warn("Branch update error:", err);
+        }
+      }
+
+      addAuditLog('branch_change', leadId, lead ? lead.name : leadId, `Branch changed to ${newBranch || 'Unassigned'}`);
+      showToast(`Branch updated to ${newBranch || 'Unassigned'}`, 'info');
       if (renderLeadsView) renderLeadsView(renderConversationsView);
       renderConversationsView();
     });
@@ -320,11 +352,15 @@ export function renderConversationsView() {
   const filtered = activeConversations.filter(lead => {
     const displayName = (lead.name || lead.phone || '').toLowerCase();
     const phone = (lead.phone || '').toLowerCase();
+    const branch = (lead.branch || '').toLowerCase();
+    const company = (lead.company || '').toLowerCase();
     const lastMsg = (lead.lastMessage || lead.lastMessageText || '').toLowerCase();
 
     const matchesSearch = !convSearchQuery ||
       displayName.includes(convSearchQuery) ||
       phone.includes(convSearchQuery) ||
+      branch.includes(convSearchQuery) ||
+      company.includes(convSearchQuery) ||
       lastMsg.includes(convSearchQuery);
 
     const matchesFilter = convFilter === 'all' || (convFilter === 'unread' && (lead.unreadCount || 0) > 0);
@@ -488,6 +524,16 @@ export function renderContactDetailsPanel(lead) {
         <option value="${user.id}" ${currentAssigneeId === user.id ? 'selected' : ''}>
           ${user.role === 'admin' ? '🛡️' : '👤'} ${escapeHtml(user.name)}
         </option>
+      `).join('')}
+    `;
+  }
+
+  // Populate Branch Select dropdown
+  if (elements.contactDetailsBranchSelect) {
+    elements.contactDetailsBranchSelect.innerHTML = `
+      <option value="" ${!lead.branch ? 'selected' : ''}>Unassigned</option>
+      ${BRANCH_LIST.map(b => `
+        <option value="${escapeHtml(b)}" ${lead.branch === b ? 'selected' : ''}>${escapeHtml(b)}</option>
       `).join('')}
     `;
   }
@@ -965,6 +1011,7 @@ export function update24HourWindowTimer() {
     }
 
     if (expiredBanner) expiredBanner.style.display = 'none';
+    if (elements.sendMessageForm) elements.sendMessageForm.style.display = 'flex';
     if (messageInput) {
       messageInput.disabled = false;
       messageInput.placeholder = "Type a WhatsApp message...";
@@ -977,6 +1024,8 @@ export function update24HourWindowTimer() {
     badge.title = '24-Hour Messaging Window Expired. Only Template Messages can be sent.';
 
     if (expiredBanner) expiredBanner.style.display = 'flex';
+    if (elements.sendMessageForm) elements.sendMessageForm.style.display = 'none';
+    if (elements.composerAttachmentsTray) elements.composerAttachmentsTray.style.display = 'none';
     if (messageInput) {
       messageInput.value = '';
       messageInput.disabled = true;

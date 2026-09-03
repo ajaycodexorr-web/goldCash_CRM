@@ -81,6 +81,7 @@ export const elements = {
   leadsSearchInput: document.getElementById('leadsSearchInput'),
   leadsCardsList: document.getElementById('leadsCardsList'),
   leadsLoadingState: document.getElementById('leadsLoadingState'),
+  leadsEmptyState: document.getElementById('leadsEmptyState'),
   leadsFilterAllBtn: document.getElementById('leadsFilterAllBtn'),
   leadStatusDropdownWrapper: document.getElementById('leadStatusDropdownWrapper'),
   leadStatusDropdownBtn: document.getElementById('leadStatusDropdownBtn'),
@@ -96,6 +97,18 @@ export const elements = {
   countLostLeads: document.getElementById('countLostLeads'),
   countDeletedLeads: document.getElementById('countDeletedLeads'),
 
+  // Branch Filter Elements
+  leadBranchFilterWrapper: document.getElementById('leadBranchFilterWrapper'),
+  leadBranchFilterBtn: document.getElementById('leadBranchFilterBtn'),
+  branchFilterBtnContent: document.getElementById('branchFilterBtnContent'),
+  branchFilterCurrentLabel: document.getElementById('branchFilterCurrentLabel'),
+  branchFilterClearQuickBtn: document.getElementById('branchFilterClearQuickBtn'),
+  branchFilterCaret: document.getElementById('branchFilterCaret'),
+  leadBranchFilterMenu: document.getElementById('leadBranchFilterMenu'),
+  clearBranchFilterTopBtn: document.getElementById('clearBranchFilterTopBtn'),
+  branchFilterSearchInput: document.getElementById('branchFilterSearchInput'),
+  branchFilterList: document.getElementById('branchFilterList'),
+
   // Add Lead Modal Elements
   openAddLeadModalBtn: document.getElementById('openAddLeadModalBtn'),
   addLeadModal: document.getElementById('addLeadModal'),
@@ -104,6 +117,7 @@ export const elements = {
   createLeadForm: document.getElementById('createLeadForm'),
   newLeadCountryCode: document.getElementById('newLeadCountryCode'),
   newLeadPhone: document.getElementById('newLeadPhone'),
+  newLeadBranch: document.getElementById('newLeadBranch'),
 
   // Export Modal Elements
   exportExcelBtn: document.getElementById('exportExcelBtn'),
@@ -224,6 +238,7 @@ export const elements = {
   contactDetailsCategory: document.getElementById('contactDetailsCategory'),
   copyContactPhoneBtn: document.getElementById('copyContactPhoneBtn'),
   contactDetailsOwnerSelect: document.getElementById('contactDetailsOwnerSelect'),
+  contactDetailsBranchSelect: document.getElementById('contactDetailsBranchSelect'),
   contactDetailsStatusSelect: document.getElementById('contactDetailsStatusSelect'),
   contactDetailsAddNoteForm: document.getElementById('contactDetailsAddNoteForm'),
   contactDetailsNoteInput: document.getElementById('contactDetailsNoteInput'),

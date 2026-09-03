@@ -516,6 +516,19 @@ export async function updateLeadAssignee(leadId, assigneeId, assigneeName) {
   });
 }
 
+export async function updateLeadBranch(leadId, branch, updatedBy) {
+  if (!db || !leadId) return;
+
+  console.log(`📍 [Firestore] Updating lead branch for [${leadId}] to "${branch}"`);
+  const leadRef = doc(db, 'leads', leadId);
+  await updateDoc(leadRef, {
+    branch: branch || null,
+    branchUpdatedAt: serverTimestamp(),
+    branchUpdatedBy: updatedBy || 'System',
+    updatedAt: serverTimestamp()
+  });
+}
+
 /**
  * Add a new note entry to a lead in Firestore
  * @param {string} leadId
@@ -981,6 +994,7 @@ export async function createNewLead(leadData) {
     name: leadData.name || 'New Lead',
     phone: rawPhone,
     status: leadData.status || 'new',
+    branch: leadData.branch || null,
     platform: leadSource,
     source: leadSource,
     assigneeId: leadData.assigneeId || null,

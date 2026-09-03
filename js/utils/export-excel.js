@@ -138,6 +138,8 @@ export async function exportLeadsToExcel(leadsToExport) {
         { header: 'Phone number', key: 'phone', width: 20 },
         { header: 'User Query', key: 'query', width: 50 },
         { header: 'Source', key: 'source', width: 18 },
+        { header: 'Assigned', key: 'assigned', width: 20 },
+        { header: 'Branch', key: 'branch', width: 22 },
         { header: 'Status', key: 'status', width: 16 },
         { header: 'Notes', key: 'notes', width: 35 },
         { header: 'Created Date', key: 'created', width: 26 }
@@ -170,6 +172,8 @@ export async function exportLeadsToExcel(leadsToExport) {
           phone: phone,
           query: userFirstQuery,
           source: source,
+          assigned: lead.assigneeName || 'Unassigned',
+          branch: lead.branch || 'Unassigned',
           status: status,
           notes: leadNotesStr,
           created: createdDate
@@ -227,8 +231,8 @@ export async function exportLeadsToExcel(leadsToExport) {
             right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
           };
 
-          if (colNumber === 1 || colNumber === 2 || colNumber === 3 || colNumber === 6) {
-            cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: colNumber === 3 || colNumber === 6 };
+          if (colNumber === 1 || colNumber === 2 || colNumber === 3 || colNumber === 8) {
+            cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: colNumber === 3 || colNumber === 8 };
           } else {
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
           }
@@ -260,7 +264,7 @@ export async function exportLeadsToExcel(leadsToExport) {
   }
 
   // Fallback HTML XML format
-  const headers = ["Name", "Phone number", "User Query", "Source", "Status", "Notes", "Created Date"];
+  const headers = ["Name", "Phone number", "User Query", "Source", "Assigned", "Branch", "Status", "Notes", "Created Date"];
   let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
@@ -300,6 +304,8 @@ export async function exportLeadsToExcel(leadsToExport) {
       <td style="mso-number-format:'\\@'; text-align: left;">${escapeHtml(phone)}</td>
       <td style="text-align: left;">${escapeHtml(userFirstQuery)}</td>
       <td style="text-align: center;"><span style="color: #15803d; font-weight: 600;">${escapeHtml(source)}</span></td>
+      <td style="text-align: center;">${escapeHtml(lead.assigneeName || 'Unassigned')}</td>
+      <td style="text-align: center;">${escapeHtml(lead.branch || 'Unassigned')}</td>
       <td style="text-align: center;"><span style="font-weight: 600;">${escapeHtml(status)}</span></td>
       <td style="text-align: left;">${leadNotesStr}</td>
       <td style="text-align: center;">${escapeHtml(createdDate)}</td>

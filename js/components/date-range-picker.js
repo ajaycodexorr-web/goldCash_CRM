@@ -98,7 +98,7 @@ export function calculatePresetRange(preset) {
     case 'this_week': {
       const dayOfWeek = now.getDay(); // 0 is Sun
       start = new Date(currentYear, currentMonth, currentDate - dayOfWeek, 0, 0, 0, 0);
-      end = new Date(currentYear, currentMonth, currentDate + (6 - dayOfWeek), 23, 59, 59, 999);
+      end = new Date(currentYear, currentMonth, currentDate, 23, 59, 59, 999);
       label = `This week: ${formatDateDisplay(start)} – ${formatDateDisplay(end)}`;
       break;
     }
@@ -125,9 +125,7 @@ export function calculatePresetRange(preset) {
     case 'this_quarter': {
       const currentQuarter = Math.floor(currentMonth / 3);
       start = new Date(currentYear, currentQuarter * 3, 1, 0, 0, 0, 0);
-      const endMonth = (currentQuarter * 3) + 2;
-      const lastDay = new Date(currentYear, endMonth + 1, 0).getDate();
-      end = new Date(currentYear, endMonth, lastDay, 23, 59, 59, 999);
+      end = new Date(currentYear, currentMonth, currentDate, 23, 59, 59, 999);
       label = `This quarter: ${formatDateDisplay(start)} – ${formatDateDisplay(end)}`;
       break;
     }
@@ -147,7 +145,7 @@ export function calculatePresetRange(preset) {
     }
     case 'this_year': {
       start = new Date(currentYear, 0, 1, 0, 0, 0, 0);
-      end = new Date(currentYear, 11, 31, 23, 59, 59, 999);
+      end = new Date(currentYear, currentMonth, currentDate, 23, 59, 59, 999);
       label = `This year: ${currentYear}`;
       break;
     }
@@ -246,6 +244,10 @@ export function setupDateRangePicker(applyCallback) {
   if (nextMonthBtn) {
     nextMonthBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      const today = new Date();
+      if (viewYear > today.getFullYear() || (viewYear === today.getFullYear() && viewMonth >= today.getMonth())) {
+        return;
+      }
       viewMonth++;
       if (viewMonth > 11) {
         viewMonth = 0;
@@ -430,6 +432,7 @@ function renderDualCalendars() {
   const rightCalendarEl = document.getElementById('drpCalendarRight');
   const leftTitleEl = document.getElementById('drpMonthTitleLeft');
   const rightTitleEl = document.getElementById('drpMonthTitleRight');
+  const nextMonthBtn = document.getElementById('drpNextMonthBtn');
 
   if (!leftCalendarEl || !rightCalendarEl) return;
 
@@ -450,6 +453,15 @@ function renderDualCalendars() {
     rightTitleEl.textContent = `${MONTH_NAMES[rightM]} ${rightY}`;
   }
 
+  // Restrict next month button if left calendar is already current month
+  if (nextMonthBtn) {
+    const today = new Date();
+    const isAtCurrentMonth = (leftY > today.getFullYear() || (leftY === today.getFullYear() && leftM >= today.getMonth()));
+    nextMonthBtn.disabled = isAtCurrentMonth;
+    nextMonthBtn.style.opacity = isAtCurrentMonth ? '0.35' : '1';
+    nextMonthBtn.style.cursor = isAtCurrentMonth ? 'not-allowed' : 'pointer';
+  }
+
   leftCalendarEl.innerHTML = buildMonthCalendarHtml(leftY, leftM);
   rightCalendarEl.innerHTML = buildMonthCalendarHtml(rightY, rightM);
 
@@ -464,6 +476,7 @@ function buildMonthCalendarHtml(year, month) {
   const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sun
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
+  const todayEndOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
   let html = `
     <div class="drp-weekdays-row">
@@ -482,6 +495,7 @@ function buildMonthCalendarHtml(year, month) {
     const currentDate = new Date(year, month, day);
     const dateIso = formatIsoDate(currentDate);
 
+    const isFuture = currentDate.getTime() > todayEndOfDay.getTime();
     const isStart = tempStartDate && isSameDay(currentDate, tempStartDate);
     const isEnd = tempEndDate && isSameDay(currentDate, tempEndDate);
     const isToday = isSameDay(currentDate, today);
@@ -496,17 +510,25 @@ function buildMonthCalendarHtml(year, month) {
       }
     }
 
-    let classNames = ['drp-day-cell', 'active-day'];
-    if (isStart) classNames.push('range-start');
-    if (isEnd) classNames.push('range-end');
-    if (inRange) classNames.push('in-range');
-    if (isToday) classNames.push('today');
+    if (isFuture) {
+      html += `
+        <button type="button" class="drp-day-cell future-day disabled-day" data-date="${dateIso}" data-year="${year}" data-month="${month}" data-day="${day}" disabled title="Future dates cannot be selected">
+          <span class="day-number">${day}</span>
+        </button>
+      `;
+    } else {
+      let classNames = ['drp-day-cell', 'active-day'];
+      if (isStart) classNames.push('range-start');
+      if (isEnd) classNames.push('range-end');
+      if (inRange) classNames.push('in-range');
+      if (isToday) classNames.push('today');
 
-    html += `
-      <button type="button" class="${classNames.join(' ')}" data-date="${dateIso}" data-year="${year}" data-month="${month}" data-day="${day}">
-        <span class="day-number">${day}</span>
-      </button>
-    `;
+      html += `
+        <button type="button" class="${classNames.join(' ')}" data-date="${dateIso}" data-year="${year}" data-month="${month}" data-day="${day}">
+          <span class="day-number">${day}</span>
+        </button>
+      `;
+    }
   }
 
   html += `</div>`;
@@ -546,6 +568,12 @@ function attachCalendarDayEvents(container) {
 function updateHoverRangeHighlights(hovered) {
   if (!tempStartDate || tempEndDate) return;
 
+  const today = new Date();
+  const todayEndOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+  if (hovered.getTime() > todayEndOfDay.getTime()) {
+    hovered = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  }
+
   const sTime = new Date(tempStartDate.getFullYear(), tempStartDate.getMonth(), tempStartDate.getDate()).getTime();
   const hTime = new Date(hovered.getFullYear(), hovered.getMonth(), hovered.getDate()).getTime();
   const minTime = Math.min(sTime, hTime);
@@ -575,6 +603,12 @@ function updateHoverRangeHighlights(hovered) {
  * Handle day click selection logic
  */
 function handleDayClick(clickedDate) {
+  const today = new Date();
+  const todayEndOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+  if (clickedDate.getTime() > todayEndOfDay.getTime()) {
+    return; // Cannot select future date
+  }
+
   // If no start date OR both start and end dates are already set:
   if (!tempStartDate || (tempStartDate && tempEndDate)) {
     tempStartDate = clickedDate;

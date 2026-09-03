@@ -308,6 +308,32 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Branch Filter Dropdown -->
+              <div class="lead-branch-filter-wrapper" id="leadBranchFilterWrapper">
+                <button type="button" class="lead-filter-pill branch-filter-btn" id="leadBranchFilterBtn" aria-haspopup="true" aria-expanded="false">
+                  <span class="branch-filter-btn-content" id="branchFilterBtnContent">
+                    <i class="fa-solid fa-location-dot"></i>
+                    <span id="branchFilterCurrentLabel">Branch</span>
+                  </span>
+                  <span class="branch-filter-clear-quick" id="branchFilterClearQuickBtn" title="Clear branch filter" style="display: none;">&times;</span>
+                  <i class="fa-solid fa-chevron-down branch-filter-caret" id="branchFilterCaret"></i>
+                </button>
+
+                <div class="lead-branch-filter-menu" id="leadBranchFilterMenu" style="display: none;">
+                  <div class="branch-filter-header">
+                    <span>Filter by Branch</span>
+                    <button type="button" class="btn-clear-branch-filter-top" id="clearBranchFilterTopBtn" style="display: none;">Clear</button>
+                  </div>
+                  <div class="branch-filter-search-wrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="branchFilterSearchInput" placeholder="Search branch...">
+                  </div>
+                  <div class="branch-filter-list" id="branchFilterList">
+                    <!-- Populated dynamically with All Branches, 18 Branches, and Unassigned -->
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="leads-filter-right-actions">
@@ -466,6 +492,7 @@
                 <div class="col-header col-query">User Query</div>
                 <div class="col-header col-platform">Source</div>
                 <div class="col-header col-assignee">Assigned</div>
+                <div class="col-header col-branch">Branch</div>
                 <div class="col-header col-status">Status</div>
                 <div class="col-header col-notes">Notes</div>
                 <div class="col-header col-date">Created Date</div>
@@ -482,7 +509,6 @@
                 <div class="leads-empty-state" id="leadsEmptyState" style="display: none;">
                   <i class="fa-solid fa-user-group"></i>
                   <h3>No leads found</h3>
-                  <p>Incoming customer queries and leads will automatically populate here.</p>
                 </div>
 
                 <div class="leads-cards-list" id="leadsCardsList">
@@ -641,7 +667,7 @@
               <div class="window-expired-banner" id="windowExpiredBanner" style="display: none;">
                 <div class="expired-text">
                   <i class="fa-solid fa-lock"></i>
-                  <span>24-Hour messaging window is closed. Custom messages are disabled by WhatsApp Meta policy.</span>
+                  <span>Messaging window is closed</span>
                 </div>
               </div>
 
@@ -722,12 +748,21 @@
                 </div>
               </div>
 
-              <!-- Owner & Status Section -->
+              <!-- Owner, Branch & Status Section -->
               <div class="contact-meta-grid">
                 <div class="meta-field-group">
                   <label class="meta-label">Owner</label>
                   <div class="meta-owner-pill">
                     <select id="contactDetailsOwnerSelect" class="contact-owner-dropdown" title="Change Assigned Owner">
+                      <option value="">Unassigned</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="meta-field-group">
+                  <label class="meta-label">Branch</label>
+                  <div class="meta-owner-pill">
+                    <select id="contactDetailsBranchSelect" class="contact-owner-dropdown" title="Change Lead Branch">
                       <option value="">Unassigned</option>
                     </select>
                   </div>
@@ -1224,17 +1259,44 @@
 
           <div class="form-group-row" style="display: flex; gap: 12px; margin-bottom: 14px;">
             <div style="flex: 1;">
-              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Initial Status</label>
-              <select id="newLeadStatus" class="custom-form-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
-                <option value="new" selected>New</option>
-                <option value="contacted">Contacted</option>
-                <option value="follow_up">Follow Up</option>
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Branch</label>
+              <select id="newLeadBranch" class="custom-form-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
+                <option value="" selected>Select Branch (Optional)</option>
+                <option value="Chandigarh">Chandigarh</option>
+                <option value="Gurgaon">Gurgaon</option>
+                <option value="Faridabad">Faridabad</option>
+                <option value="Kanpur">Kanpur</option>
+                <option value="Lucknow">Lucknow</option>
+                <option value="Indore">Indore</option>
+                <option value="Patna">Patna</option>
+                <option value="Raipur">Raipur</option>
+                <option value="Jamshedpur">Jamshedpur</option>
+                <option value="Mumbai">Mumbai</option>
+                <option value="Bhadrak">Bhadrak</option>
+                <option value="Cuttack">Cuttack</option>
+                <option value="Kolkata">Kolkata</option>
+                <option value="Chandrasekharpur BBSR">Chandrasekharpur BBSR</option>
+                <option value="Kharvel Nagar BBSR">Kharvel Nagar BBSR</option>
+                <option value="Ashoknagar BBSR">Ashoknagar BBSR</option>
+                <option value="Guwahati">Guwahati</option>
+                <option value="Agartala">Agartala</option>
               </select>
             </div>
             <div style="flex: 1;">
               <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Assignee</label>
               <select id="newLeadAssignee" class="custom-form-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
                 <option value="">Unassigned</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group-row" style="display: flex; gap: 12px; margin-bottom: 14px;">
+            <div style="flex: 1;">
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Initial Status</label>
+              <select id="newLeadStatus" class="custom-form-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
+                <option value="new" selected>New</option>
+                <option value="contacted">Contacted</option>
+                <option value="follow_up">Follow Up</option>
               </select>
             </div>
           </div>
@@ -1605,7 +1667,7 @@
               <i class="fa-solid fa-plus" style="color: var(--crm-primary);"></i> Add New Note
             </label>
             <div style="position: relative;">
-              <textarea id="leadNotesInput" placeholder="Type customer requirements, follow-up updates, call summary..." rows="3" required style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 13px; line-height: 1.5; resize: vertical; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s;"></textarea>
+              <textarea id="leadNotesInput" class="lead-notes-textarea" placeholder="Type customer requirements, follow-up updates, call summary..." rows="3" required></textarea>
             </div>
             <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
               <button type="submit" class="btn-primary" id="saveLeadNotesSubmitBtn" style="padding: 7px 18px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; border-radius: 7px;">

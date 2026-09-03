@@ -11,6 +11,7 @@ export const state = {
   // Search & Filter
   leadsSearchQuery: '',
   leadsFilter: 'all', // 'all' | 'new' | 'contacted' | 'no_answer' | 'follow_up' | 'converted' | 'lost' | 'deleted'
+  leadsBranchFilter: 'all', // 'all' | 'unassigned' | branch name (e.g. 'Mumbai')
   leadsDateFilter: {
     preset: 'all',
     startDate: null,

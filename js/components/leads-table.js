@@ -2,7 +2,7 @@
  * Leads Dashboard Table Renderer & Actions Handler
  */
 
-import { updateLeadStatus, updateLeadAssignee, addLeadNote, updateLeadNotes, createNewLead, sendWhatsAppMessage } from '../../firebase-config.js';
+import { updateLeadStatus, updateLeadAssignee, updateLeadBranch, addLeadNote, updateLeadNotes, createNewLead, sendWhatsAppMessage } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote, parseDate, hasWhatsAppConversation } from '../utils/formatters.js';
@@ -11,6 +11,7 @@ import { getUserFirstQuery } from '../utils/export-excel.js';
 import { addAuditLog } from '../services/logging-service.js';
 import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
 import { hasPermission } from '../services/user-service.js';
+import { resetToAllTime } from './date-range-picker.js';
 
 export const STATUS_CONFIG = {
   new: { label: 'New', dotClass: 'dot-new' },
@@ -21,6 +22,27 @@ export const STATUS_CONFIG = {
   lost: { label: 'Lost', dotClass: 'dot-lost' },
   deleted: { label: 'Deleted', dotClass: 'dot-deleted' }
 };
+
+export const BRANCH_LIST = [
+  "Chandigarh",
+  "Gurgaon",
+  "Faridabad",
+  "Kanpur",
+  "Lucknow",
+  "Indore",
+  "Patna",
+  "Raipur",
+  "Jamshedpur",
+  "Mumbai",
+  "Bhadrak",
+  "Cuttack",
+  "Kolkata",
+  "Chandrasekharpur BBSR",
+  "Kharvel Nagar BBSR",
+  "Ashoknagar BBSR",
+  "Guwahati",
+  "Agartala"
+];
 
 export function toggleStatusFilterDropdown() {
   if (!elements.leadStatusDropdownMenu) return;
@@ -52,6 +74,55 @@ export function closeStatusFilterDropdown() {
   }
 }
 
+export function toggleBranchFilterDropdown() {
+  if (!elements.leadBranchFilterMenu) return;
+  const isShown = elements.leadBranchFilterMenu.style.display === 'block';
+  if (isShown) {
+    closeBranchFilterDropdown();
+  } else {
+    openBranchFilterDropdown();
+  }
+}
+
+export function openBranchFilterDropdown() {
+  closeStatusFilterDropdown();
+  if (elements.leadBranchFilterMenu) {
+    elements.leadBranchFilterMenu.style.display = 'block';
+  }
+  if (elements.leadBranchFilterBtn) {
+    elements.leadBranchFilterBtn.setAttribute('aria-expanded', 'true');
+    elements.leadBranchFilterBtn.classList.add('dropdown-open');
+  }
+  if (elements.branchFilterSearchInput) {
+    elements.branchFilterSearchInput.value = '';
+    filterBranchDropdownListItems('');
+    setTimeout(() => elements.branchFilterSearchInput.focus(), 50);
+  }
+}
+
+export function closeBranchFilterDropdown() {
+  if (elements.leadBranchFilterMenu) {
+    elements.leadBranchFilterMenu.style.display = 'none';
+  }
+  if (elements.leadBranchFilterBtn) {
+    elements.leadBranchFilterBtn.setAttribute('aria-expanded', 'false');
+    elements.leadBranchFilterBtn.classList.remove('dropdown-open');
+  }
+}
+
+function filterBranchDropdownListItems(query) {
+  if (!elements.branchFilterList) return;
+  const q = (query || '').toLowerCase().trim();
+  elements.branchFilterList.querySelectorAll('.branch-filter-item').forEach(item => {
+    const name = (item.dataset.name || '').toLowerCase();
+    if (!q || name.includes(q)) {
+      item.style.display = 'flex';
+    } else {
+      item.style.display = 'none';
+    }
+  });
+}
+
 export function setupLeadsHandlers(renderConversationsView, openLeadChat, renderLeadsView) {
   // Search input
   if (elements.leadsSearchInput) {
@@ -75,6 +146,7 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
   if (elements.leadStatusDropdownBtn) {
     elements.leadStatusDropdownBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      closeBranchFilterDropdown();
       toggleStatusFilterDropdown();
     });
   }
@@ -93,17 +165,62 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
     });
   });
 
-  // Global Outside Click to Close Status Dropdown
+  // Branch Filter Dropdown Toggle
+  if (elements.leadBranchFilterBtn) {
+    elements.leadBranchFilterBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeStatusFilterDropdown();
+      toggleBranchFilterDropdown();
+    });
+  }
+
+  // Quick Clear Branch Filter
+  if (elements.branchFilterClearQuickBtn) {
+    elements.branchFilterClearQuickBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.leadsBranchFilter = 'all';
+      state.leadsCurrentPage = 1;
+      closeBranchFilterDropdown();
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  }
+
+  // Top Clear Branch Filter inside Menu
+  if (elements.clearBranchFilterTopBtn) {
+    elements.clearBranchFilterTopBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.leadsBranchFilter = 'all';
+      state.leadsCurrentPage = 1;
+      closeBranchFilterDropdown();
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  }
+
+  // Branch Search Filter inside Menu
+  if (elements.branchFilterSearchInput) {
+    elements.branchFilterSearchInput.addEventListener('input', (e) => {
+      filterBranchDropdownListItems(e.target.value);
+    });
+    elements.branchFilterSearchInput.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
+
+  // Global Outside Click to Close Dropdowns
   document.addEventListener('click', (e) => {
     if (elements.leadStatusDropdownWrapper && !elements.leadStatusDropdownWrapper.contains(e.target)) {
       closeStatusFilterDropdown();
     }
+    if (elements.leadBranchFilterWrapper && !elements.leadBranchFilterWrapper.contains(e.target)) {
+      closeBranchFilterDropdown();
+    }
   });
 
-  // ESC to close Status Dropdown
+  // ESC to close Dropdowns
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeStatusFilterDropdown();
+      closeBranchFilterDropdown();
     }
   });
 
@@ -285,6 +402,7 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
       const phoneInput = document.getElementById('newLeadPhone');
       const sourceEl = document.getElementById('newLeadSource');
       const customSourceEl = document.getElementById('newLeadCustomSource');
+      const branchSelect = document.getElementById('newLeadBranch');
       const statusSelect = document.getElementById('newLeadStatus');
       const assigneeSelect = document.getElementById('newLeadAssignee');
       const noteInput = document.getElementById('newLeadNote');
@@ -292,6 +410,7 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
       const name = nameInput ? nameInput.value.trim() : '';
       let rawPhone = phoneInput ? phoneInput.value.trim() : '';
       const countryCode = countryCodeSelect ? countryCodeSelect.value.trim() : '+91';
+      const branch = branchSelect ? branchSelect.value.trim() || null : null;
 
       let phone = rawPhone;
       if (phone) {
@@ -347,6 +466,7 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
         platform: finalSource,
         source: finalSource,
         status,
+        branch,
         assigneeId: assigneeId || null,
         assigneeName,
         notes: initialNotesList,
@@ -503,11 +623,17 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
   const filtered = leadsOnly.filter(lead => {
     const displayName = (lead.name || lead.phone || '').toLowerCase();
     const phone = (lead.phone || '').toLowerCase();
+    const branch = (lead.branch || '').toLowerCase();
+    const company = (lead.company || '').toLowerCase();
+    const assigneeName = (lead.assigneeName || '').toLowerCase();
     const lastMsg = (lead.lastMessage || '').toLowerCase();
 
     const matchesSearch = !leadsSearchQuery ||
       displayName.includes(leadsSearchQuery) ||
       phone.includes(leadsSearchQuery) ||
+      branch.includes(leadsSearchQuery) ||
+      company.includes(leadsSearchQuery) ||
+      assigneeName.includes(leadsSearchQuery) ||
       lastMsg.includes(leadsSearchQuery);
 
     const status = (lead.status || 'new').toLowerCase();
@@ -541,7 +667,18 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
       }
     }
 
-    return matchesSearch && matchesFilter && matchesDate;
+    // Branch Evaluation
+    let matchesBranch = true;
+    const branchFilter = state.leadsBranchFilter || 'all';
+    if (branchFilter !== 'all') {
+      if (branchFilter === 'unassigned') {
+        matchesBranch = !lead.branch || lead.branch === '' || lead.branch === 'Unassigned';
+      } else {
+        matchesBranch = (lead.branch || '').toLowerCase() === branchFilter.toLowerCase();
+      }
+    }
+
+    return matchesSearch && matchesFilter && matchesDate && matchesBranch;
   });
 
   // Update counters
@@ -631,10 +768,23 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
     }
   });
 
+  // Render & Synchronize Branch Filter Dropdown
+  renderBranchFilterDropdown(activeLeadsOnly, renderConversationsView, openLeadChat, renderLeadsView);
+
+  // Toggle Action Header Column in Deleted View
+  const isDeletedFilter = leadsFilter === 'deleted';
+  const actionHeaderCol = document.querySelector('.leads-table-header .col-actions');
+  if (actionHeaderCol) {
+    actionHeaderCol.style.display = isDeletedFilter ? 'none' : 'flex';
+  }
+
   if (elements.leadsLoadingState) elements.leadsLoadingState.style.display = 'none';
 
   if ((activeCount === 0 && deletedCount === 0) || filtered.length === 0) {
-    if (elements.leadsEmptyState) elements.leadsEmptyState.style.display = 'flex';
+    if (elements.leadsEmptyState) {
+      elements.leadsEmptyState.style.display = 'flex';
+      renderContextualEmptyState(renderConversationsView, openLeadChat, renderLeadsView);
+    }
     if (elements.leadsCardsList) elements.leadsCardsList.innerHTML = '';
     renderLeadsPagination(0, 1, renderConversationsView, openLeadChat);
     return;
@@ -704,12 +854,16 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
 
         <!-- 5. Assigned -->
         <div class="lead-assignee-col">
-          ${(!hasPermission('canAssignLead') || isAgent) ? `
+          ${isDeleted ? `
+            <span class="lead-static-pill" title="Assigned: ${escapeHtml(currentAssigneeName)}">
+              ${escapeHtml(currentAssigneeName)}
+            </span>
+          ` : (!hasPermission('canAssignLead') || isAgent) ? `
             <span class="assignee-badge-pill" title="Assigned: ${escapeHtml(currentAssigneeName)}">
               <i class="fa-solid fa-user-check"></i> ${escapeHtml(currentAssigneeName)}
             </span>
           ` : `
-            <select class="lead-assignee-select" data-lead-id="${escapeHtml(lead.id)}" ${isDeleted || isDisabledUser ? 'disabled' : ''}>
+            <select class="lead-assignee-select" data-lead-id="${escapeHtml(lead.id)}" ${isDisabledUser ? 'disabled' : ''}>
               <option value="" ${!currentAssigneeId ? 'selected' : ''}>Unassigned</option>
               ${teamMembers.map(user => `
                 <option value="${user.id}" ${currentAssigneeId === user.id ? 'selected' : ''}>
@@ -720,50 +874,81 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
           `}
         </div>
 
-        <!-- 6. Status -->
+        <!-- 6. Branch -->
+        <div class="lead-branch-col">
+          ${isDeleted ? `
+            <span class="lead-static-pill" title="Branch: ${escapeHtml(lead.branch || 'Unassigned')}">
+              ${escapeHtml(lead.branch || 'Unassigned')}
+            </span>
+          ` : `
+            <select class="lead-branch-select" data-lead-id="${escapeHtml(lead.id)}" ${isDisabledUser ? 'disabled' : ''}>
+              <option value="" ${!lead.branch ? 'selected' : ''}>Unassigned</option>
+              ${BRANCH_LIST.map(b => `
+                <option value="${escapeHtml(b)}" ${lead.branch === b ? 'selected' : ''}>${escapeHtml(b)}</option>
+              `).join('')}
+            </select>
+          `}
+        </div>
+
+        <!-- 7. Status -->
         <div class="lead-status-col">
-          <select class="lead-status-select status-${currentStatus}" data-lead-id="${escapeHtml(lead.id)}" ${isDeleted || isDisabledUser || !hasPermission('canChangeStatus') ? 'disabled' : ''} ${!hasPermission('canChangeStatus') ? 'title="You do not have permission to change lead status" style="cursor: not-allowed;"' : ''}>
-            ${isDeleted ? `<option value="deleted" selected disabled>Deleted</option>` : ''}
-            <option value="new" ${currentStatus === 'new' ? 'selected' : ''}>New</option>
-            <option value="contacted" ${currentStatus === 'contacted' ? 'selected' : ''}>Contacted</option>
-            <option value="no_answer" ${currentStatus === 'no_answer' ? 'selected' : ''}>No Answer</option>
-            <option value="follow_up" ${currentStatus === 'follow_up' ? 'selected' : ''}>Follow Up</option>
-            <option value="converted" ${currentStatus === 'converted' ? 'selected' : ''}>Converted</option>
-            <option value="lost" ${currentStatus === 'lost' ? 'selected' : ''}>Lost</option>
-          </select>
+          ${isDeleted ? `
+            <span class="lead-static-status-badge status-deleted" title="Status: Deleted">
+              Deleted
+            </span>
+          ` : `
+            <select class="lead-status-select status-${currentStatus}" data-lead-id="${escapeHtml(lead.id)}" ${isDisabledUser || !hasPermission('canChangeStatus') ? 'disabled' : ''} ${!hasPermission('canChangeStatus') ? 'title="You do not have permission to change lead status" style="cursor: not-allowed;"' : ''}>
+              <option value="new" ${currentStatus === 'new' ? 'selected' : ''}>New</option>
+              <option value="contacted" ${currentStatus === 'contacted' ? 'selected' : ''}>Contacted</option>
+              <option value="no_answer" ${currentStatus === 'no_answer' ? 'selected' : ''}>No Answer</option>
+              <option value="follow_up" ${currentStatus === 'follow_up' ? 'selected' : ''}>Follow Up</option>
+              <option value="converted" ${currentStatus === 'converted' ? 'selected' : ''}>Converted</option>
+              <option value="lost" ${currentStatus === 'lost' ? 'selected' : ''}>Lost</option>
+            </select>
+          `}
         </div>
 
-        <!-- 7. Notes -->
+        <!-- 8. Notes -->
         <div class="lead-notes-col">
-          <div class="lead-note-badge ${latestNoteText ? 'has-note' : 'no-note'}" data-lead-id="${escapeHtml(lead.id)}" title="${escapeHtml(noteTooltip)}">
-            <i class="fa-regular fa-note-sticky note-icon"></i>
-            <span class="note-text">${escapeHtml(latestNoteText || (hasPermission('canAddNote') ? '+ Add note' : 'No notes'))}</span>
-            ${notesList.length > 1 ? `<span class="note-count-pill" title="${notesList.length} total notes">${notesList.length}</span>` : ''}
-            ${hasPermission('canAddNote') ? `
-              <button type="button" class="btn-note-edit" data-lead-id="${escapeHtml(lead.id)}" title="View notes history & add note">
-                <i class="fa-solid fa-pen"></i>
-              </button>
-            ` : ''}
-          </div>
+          ${isDeleted ? `
+            <div class="lead-note-badge static-deleted-note" title="${escapeHtml(noteTooltip)}">
+              <i class="fa-regular fa-note-sticky note-icon"></i>
+              <span class="note-text">${escapeHtml(latestNoteText || 'No notes')}</span>
+              ${notesList.length > 1 ? `<span class="note-count-pill" title="${notesList.length} total notes">${notesList.length}</span>` : ''}
+            </div>
+          ` : `
+            <div class="lead-note-badge ${latestNoteText ? 'has-note' : 'no-note'}" data-lead-id="${escapeHtml(lead.id)}" title="${escapeHtml(noteTooltip)}">
+              <i class="fa-regular fa-note-sticky note-icon"></i>
+              <span class="note-text">${escapeHtml(latestNoteText || (hasPermission('canAddNote') ? '+ Add note' : 'No notes'))}</span>
+              ${notesList.length > 1 ? `<span class="note-count-pill" title="${notesList.length} total notes">${notesList.length}</span>` : ''}
+              ${hasPermission('canAddNote') ? `
+                <button type="button" class="btn-note-edit" data-lead-id="${escapeHtml(lead.id)}" title="View notes history & add note">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+              ` : ''}
+            </div>
+          `}
         </div>
 
-        <!-- 8. Created Date with Time -->
+        <!-- 9. Created Date with Time -->
         <div class="lead-time-col">
           <span>${createdDateTime}</span>
         </div>
 
-        <!-- 9. Action -->
-        <div class="lead-actions-col">
-          ${isDeleted ? '' : `
-            <button class="btn-lead-delete ${(!hasPermission('canDeleteLead') || isDisabledUser) ? 'disabled' : ''}" 
-                    data-action="delete" 
-                    data-lead-id="${escapeHtml(lead.id)}" 
-                    ${(!hasPermission('canDeleteLead') || isDisabledUser) ? 'disabled style="cursor: not-allowed; opacity: 0.45;"' : ''} 
-                    title="${!hasPermission('canDeleteLead') ? 'You do not have permission to delete leads' : 'Delete lead'}">
-              <i class="fa-regular fa-trash-can"></i>
-            </button>
-          `}
-        </div>
+        ${isDeletedFilter ? '' : `
+          <!-- 10. Action -->
+          <div class="lead-actions-col">
+            ${isDeleted ? '' : `
+              <button class="btn-lead-delete ${(!hasPermission('canDeleteLead') || isDisabledUser) ? 'disabled' : ''}" 
+                      data-action="delete" 
+                      data-lead-id="${escapeHtml(lead.id)}" 
+                      ${(!hasPermission('canDeleteLead') || isDisabledUser) ? 'disabled style="cursor: not-allowed; opacity: 0.45;"' : ''} 
+                      title="${!hasPermission('canDeleteLead') ? 'You do not have permission to delete leads' : 'Delete lead'}">
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
+            `}
+          </div>
+        `}
       </div>
     `;
   }).join('');
@@ -782,7 +967,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
   });
 
   // Note Badge Click Listeners
-  elements.leadsCardsList.querySelectorAll('.lead-note-badge').forEach(badge => {
+  elements.leadsCardsList.querySelectorAll('.lead-note-badge:not(.static-deleted-note)').forEach(badge => {
     badge.addEventListener('click', (e) => {
       e.stopPropagation();
       const leadId = badge.dataset.leadId;
@@ -862,6 +1047,39 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
     });
   });
 
+  // Branch Select Listener
+  elements.leadsCardsList.querySelectorAll('.lead-branch-select').forEach(select => {
+    select.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      if (state.currentUser && state.currentUser.status === 'disabled') {
+        showToast("Your account is disabled. You cannot perform actions.", "error");
+        return;
+      }
+      const leadId = select.dataset.leadId;
+      const newBranch = select.value.trim() || null;
+      const performerName = state.currentUser ? state.currentUser.name : 'Super Admin';
+
+      const lead = state.leads.find(l => l.id === leadId);
+      if (lead) {
+        lead.branch = newBranch;
+        lead.branchUpdatedAt = new Date().toISOString();
+        lead.branchUpdatedBy = performerName;
+      }
+
+      if (!state.demoMode) {
+        try {
+          await updateLeadBranch(leadId, newBranch, performerName);
+        } catch (err) {
+          console.warn("Branch update error:", err);
+        }
+      }
+
+      addAuditLog('branch_change', leadId, lead ? lead.name : leadId, `Updated lead branch to ${newBranch || 'Unassigned'}`);
+      showToast(`Branch updated to ${newBranch || 'Unassigned'}`, 'info');
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  });
+
   renderLeadsPagination(totalRecords, totalPages, renderConversationsView, openLeadChat);
 }
 
@@ -901,7 +1119,7 @@ export function renderLeadNotesHistory(lead) {
             <div class="note-author-avatar" title="${escapeHtml(authorName)}">${escapeHtml(initials)}</div>
             <span class="note-author-name">${escapeHtml(authorName)}</span>
             <span class="note-author-badge">${escapeHtml(authorRole)}</span>
-            ${isLatest ? `<span style="font-size: 10px; font-weight: 700; color: var(--crm-primary); background: #dbeafe; padding: 1px 5px; border-radius: 4px;">Latest</span>` : ''}
+            ${isLatest ? `<span style="font-size: 10px; font-weight: 700; color: var(--crm-primary); background: #ffedd5; padding: 1px 6px; border-radius: 4px;">Latest</span>` : ''}
           </div>
           <span class="note-history-time" title="${escapeHtml(timeFormatted)}">
             <i class="fa-regular fa-clock"></i> ${escapeHtml(relTime)}
@@ -1094,5 +1312,250 @@ export function formatSourceBadge(sourceValue, referral = null) {
     return `<span class="channel-pill crm" title="Source: CRM"><i class="fa-solid fa-laptop"></i> CRM</span>`;
   } else {
     return `<span class="channel-pill custom-source" title="Source: ${escapeHtml(raw)}"><i class="fa-solid fa-tag"></i> ${escapeHtml(raw)}</span>`;
+  }
+}
+
+/**
+ * Render Branch Filter Dropdown List & Button States
+ */
+function renderBranchFilterDropdown(activeLeads, renderConversationsView, openLeadChat, renderLeadsView) {
+  if (!elements.branchFilterList) return;
+
+  const currentBranchFilter = state.leadsBranchFilter || 'all';
+  const totalActive = activeLeads.length;
+
+  // Compute branch lead counts
+  const branchCounts = {};
+  BRANCH_LIST.forEach(b => { branchCounts[b.toLowerCase()] = 0; });
+  let unassignedBranchCount = 0;
+
+  activeLeads.forEach(lead => {
+    const b = (lead.branch || '').trim();
+    if (!b || b === 'Unassigned') {
+      unassignedBranchCount++;
+    } else {
+      const key = b.toLowerCase();
+      branchCounts[key] = (branchCounts[key] || 0) + 1;
+    }
+  });
+
+  let selectedBranchCount = totalActive;
+  if (currentBranchFilter === 'unassigned') {
+    selectedBranchCount = unassignedBranchCount;
+  } else if (currentBranchFilter !== 'all') {
+    selectedBranchCount = branchCounts[currentBranchFilter.toLowerCase()] || 0;
+  }
+
+  // Update Branch Filter Button UI
+  if (currentBranchFilter === 'all') {
+    if (elements.leadBranchFilterBtn) elements.leadBranchFilterBtn.classList.remove('active');
+    if (elements.branchFilterCurrentLabel) elements.branchFilterCurrentLabel.textContent = 'Branch';
+    if (elements.branchFilterClearQuickBtn) elements.branchFilterClearQuickBtn.style.display = 'none';
+    if (elements.clearBranchFilterTopBtn) elements.clearBranchFilterTopBtn.style.display = 'none';
+  } else {
+    if (elements.leadBranchFilterBtn) elements.leadBranchFilterBtn.classList.add('active');
+    const displayLabel = currentBranchFilter === 'unassigned' ? 'Unassigned' : currentBranchFilter;
+    if (elements.branchFilterCurrentLabel) {
+      elements.branchFilterCurrentLabel.textContent = `${displayLabel} (${selectedBranchCount})`;
+    }
+    if (elements.branchFilterClearQuickBtn) elements.branchFilterClearQuickBtn.style.display = 'inline-flex';
+    if (elements.clearBranchFilterTopBtn) elements.clearBranchFilterTopBtn.style.display = 'inline-block';
+  }
+
+  // Build List HTML
+  let html = `
+    <button type="button" class="branch-filter-item ${currentBranchFilter === 'all' ? 'selected' : ''}" data-branch="all" data-name="All Branches">
+      <span class="branch-item-name">All Branches</span>
+      <span class="branch-item-count">${totalActive}</span>
+      <i class="fa-solid fa-check branch-check-icon"></i>
+    </button>
+    <div class="branch-filter-divider"></div>
+  `;
+
+  BRANCH_LIST.forEach(branchName => {
+    const isSelected = currentBranchFilter.toLowerCase() === branchName.toLowerCase();
+    const count = branchCounts[branchName.toLowerCase()] || 0;
+    html += `
+      <button type="button" class="branch-filter-item ${isSelected ? 'selected' : ''}" data-branch="${escapeHtml(branchName)}" data-name="${escapeHtml(branchName)}">
+        <span class="branch-item-name">${escapeHtml(branchName)}</span>
+        <span class="branch-item-count">${count}</span>
+        <i class="fa-solid fa-check branch-check-icon"></i>
+      </button>
+    `;
+  });
+
+  const isUnassignedSelected = currentBranchFilter === 'unassigned';
+  html += `
+    <div class="branch-filter-divider"></div>
+    <button type="button" class="branch-filter-item ${isUnassignedSelected ? 'selected' : ''}" data-branch="unassigned" data-name="Unassigned Branch">
+      <span class="branch-item-name">Unassigned</span>
+      <span class="branch-item-count">${unassignedBranchCount}</span>
+      <i class="fa-solid fa-check branch-check-icon"></i>
+    </button>
+  `;
+
+  elements.branchFilterList.innerHTML = html;
+
+  // Attach click listeners to branch items
+  elements.branchFilterList.querySelectorAll('.branch-filter-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const branchVal = item.dataset.branch;
+      state.leadsBranchFilter = branchVal;
+      state.leadsCurrentPage = 1;
+      closeBranchFilterDropdown();
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  });
+}
+
+/**
+ * Render contextual empty state with specific status, branch, and date range feedback & reset buttons
+ */
+export function renderContextualEmptyState(renderConversationsView, openLeadChat, renderLeadsView) {
+  if (!elements.leadsEmptyState) return;
+
+  const { leadsFilter, leadsBranchFilter, leadsSearchQuery, leadsDateFilter, currentUser } = state;
+  const isAgent = currentUser && (currentUser.role === 'agent' || currentUser.role === 'maker');
+  const statusConfig = STATUS_CONFIG[leadsFilter];
+  const statusLabel = statusConfig ? statusConfig.label : (leadsFilter !== 'all' ? leadsFilter : null);
+
+  const hasDateFilter = leadsDateFilter && leadsDateFilter.preset && leadsDateFilter.preset !== 'all' && (leadsDateFilter.startDate || leadsDateFilter.endDate);
+  const dateLabel = hasDateFilter ? (leadsDateFilter.label || 'Selected Date Range') : null;
+  const hasBranchFilter = leadsBranchFilter && leadsBranchFilter !== 'all';
+  const branchLabel = hasBranchFilter ? (leadsBranchFilter === 'unassigned' ? 'Unassigned Branch' : `${leadsBranchFilter} branch`) : null;
+  const hasSearch = !!(leadsSearchQuery && leadsSearchQuery.trim());
+
+  let iconHtml = '';
+  let title = 'No leads found';
+  let actionsHtml = '';
+
+  if (hasSearch) {
+    iconHtml = `<div class="leads-empty-state-icon-wrap"><i class="fa-solid fa-magnifying-glass" style="color: #64748b;"></i></div>`;
+    title = `No results found for "${escapeHtml(leadsSearchQuery)}"`;
+    actionsHtml = `
+      <div class="empty-state-actions">
+        <button type="button" class="btn-clear-empty-filter" id="emptyClearSearchBtn">
+          <i class="fa-solid fa-xmark"></i> Clear Search
+        </button>
+      </div>
+    `;
+  } else if ((statusLabel || hasDateFilter || hasBranchFilter) && (Number(!!statusLabel) + Number(!!hasDateFilter) + Number(!!hasBranchFilter) > 1)) {
+    iconHtml = `<div class="leads-empty-state-icon-wrap"><i class="fa-solid fa-filter-circle-xmark" style="color: #d97706;"></i></div>`;
+    const parts = [];
+    if (statusLabel) parts.push(statusLabel);
+    if (branchLabel) parts.push(`in ${branchLabel}`);
+    if (dateLabel) parts.push(`for ${dateLabel}`);
+    title = `No ${escapeHtml(parts.join(' '))} leads found`;
+    actionsHtml = `
+      <div class="empty-state-actions">
+        <button type="button" class="btn-clear-empty-filter" id="emptyClearAllFiltersBtn">
+          <i class="fa-solid fa-rotate-left"></i> Reset All Filters
+        </button>
+      </div>
+    `;
+  } else if (branchLabel) {
+    iconHtml = `<div class="leads-empty-state-icon-wrap"><i class="fa-solid fa-location-dot" style="color: var(--crm-primary, #df8516);"></i></div>`;
+    title = `No leads found for ${escapeHtml(branchLabel)}`;
+    actionsHtml = `
+      <div class="empty-state-actions">
+        <button type="button" class="btn-clear-empty-filter" id="emptyClearBranchOnlyBtn">
+          <i class="fa-solid fa-globe"></i> Show All Branches
+        </button>
+      </div>
+    `;
+  } else if (statusLabel) {
+    iconHtml = `<div class="leads-empty-state-icon-wrap"><i class="fa-solid fa-folder-open" style="color: #64748b;"></i></div>`;
+    title = `No ${escapeHtml(statusLabel)} leads found`;
+    actionsHtml = `
+      <div class="empty-state-actions">
+        <button type="button" class="btn-clear-empty-filter" id="emptyShowAllLeadsBtn">
+          <i class="fa-solid fa-list"></i> View All Leads
+        </button>
+      </div>
+    `;
+  } else if (hasDateFilter) {
+    iconHtml = `<div class="leads-empty-state-icon-wrap"><i class="fa-solid fa-calendar-xmark" style="color: #2563eb;"></i></div>`;
+    title = `No leads found for ${escapeHtml(dateLabel)}`;
+    actionsHtml = `
+      <div class="empty-state-actions">
+        <button type="button" class="btn-clear-empty-filter" id="emptyClearDateOnlyBtn">
+          <i class="fa-solid fa-calendar-check"></i> Show All Dates
+        </button>
+      </div>
+    `;
+  } else if (isAgent) {
+    iconHtml = `<div class="leads-empty-state-icon-wrap"><i class="fa-solid fa-user-clock" style="color: #2563eb;"></i></div>`;
+    title = `No leads assigned to you`;
+    actionsHtml = '';
+  } else {
+    iconHtml = `<div class="leads-empty-state-icon-wrap"><i class="fa-solid fa-users" style="color: #cca43b;"></i></div>`;
+    title = `No leads found`;
+    actionsHtml = '';
+  }
+
+  elements.leadsEmptyState.innerHTML = `
+    ${iconHtml}
+    <h3>${title}</h3>
+    ${actionsHtml}
+  `;
+
+  // Attach event listeners to dynamic action buttons
+  const clearSearchBtn = document.getElementById('emptyClearSearchBtn');
+  if (clearSearchBtn) {
+    clearSearchBtn.addEventListener('click', () => {
+      state.leadsSearchQuery = '';
+      if (elements.leadsSearchInput) elements.leadsSearchInput.value = '';
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  }
+
+  const clearAllFiltersBtn = document.getElementById('emptyClearAllFiltersBtn');
+  if (clearAllFiltersBtn) {
+    clearAllFiltersBtn.addEventListener('click', () => {
+      state.leadsFilter = 'all';
+      state.leadsBranchFilter = 'all';
+      state.leadsCurrentPage = 1;
+      closeStatusFilterDropdown();
+      closeBranchFilterDropdown();
+      resetToAllTime();
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  }
+
+  const clearBranchOnlyBtn = document.getElementById('emptyClearBranchOnlyBtn');
+  if (clearBranchOnlyBtn) {
+    clearBranchOnlyBtn.addEventListener('click', () => {
+      state.leadsBranchFilter = 'all';
+      state.leadsCurrentPage = 1;
+      closeBranchFilterDropdown();
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  }
+
+  const clearDateFilterBtn = document.getElementById('emptyClearDateFilterBtn');
+  if (clearDateFilterBtn) {
+    clearDateFilterBtn.addEventListener('click', () => {
+      resetToAllTime();
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  }
+
+  const clearDateOnlyBtn = document.getElementById('emptyClearDateOnlyBtn');
+  if (clearDateOnlyBtn) {
+    clearDateOnlyBtn.addEventListener('click', () => {
+      resetToAllTime();
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  }
+
+  const showAllLeadsBtn = document.getElementById('emptyShowAllLeadsBtn');
+  if (showAllLeadsBtn) {
+    showAllLeadsBtn.addEventListener('click', () => {
+      state.leadsFilter = 'all';
+      state.leadsCurrentPage = 1;
+      closeStatusFilterDropdown();
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
   }
 }
