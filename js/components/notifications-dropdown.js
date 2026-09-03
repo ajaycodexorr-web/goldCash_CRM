@@ -265,7 +265,7 @@ export function clearAllNotifications() {
 }
 
 /**
- * Mark a single notification as read and open lead
+ * Mark a single notification as read and route to lead or chat
  */
 function handleNotificationClick(notif) {
   notif.isRead = true;
@@ -274,8 +274,9 @@ function handleNotificationClick(notif) {
   renderNotificationList();
   closeNotificationDropdown();
 
+  const notifType = notif.type || (notif.title && notif.title.toLowerCase().includes('message') ? 'message' : 'lead');
   if (onLeadSelectCallback && notif.leadId) {
-    onLeadSelectCallback(notif.leadId);
+    onLeadSelectCallback(notif.leadId, notifType, notif);
   }
 }
 
@@ -335,10 +336,10 @@ export function renderNotificationList() {
   listContainer.innerHTML = notifications.map(n => {
     const isUnread = !n.isRead;
     const timeFormatted = formatRelativeTime(n.timestamp);
-    const isMessage = n.type === 'message';
+    const isMessage = n.type === 'message' || (n.title && n.title.toLowerCase().includes('message'));
 
     return `
-      <div class="notif-item ${isUnread ? 'unread' : ''} ${isMessage ? 'notif-message-type' : 'notif-lead-type'}" data-id="${escapeHtml(n.id)}" data-lead-id="${escapeHtml(n.leadId)}">
+      <div class="notif-item ${isUnread ? 'unread' : ''} ${isMessage ? 'notif-message-type' : 'notif-lead-type'}" data-id="${escapeHtml(n.id)}" data-lead-id="${escapeHtml(n.leadId)}" style="cursor: pointer;">
         <div class="notif-item-icon ${isMessage ? 'icon-message' : 'icon-lead'}">
           ${isMessage ? '<i class="fa-brands fa-whatsapp"></i>' : '<i class="fa-solid fa-user-plus"></i>'}
         </div>

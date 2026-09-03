@@ -5,12 +5,52 @@
 import { updateLeadStatus, updateLeadAssignee, addLeadNote, updateLeadNotes, createNewLead, sendWhatsAppMessage } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
-import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote } from '../utils/formatters.js';
+import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote, parseDate, hasWhatsAppConversation } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
 import { getUserFirstQuery } from '../utils/export-excel.js';
 import { addAuditLog } from '../services/logging-service.js';
 import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
 import { hasPermission } from '../services/user-service.js';
+
+export const STATUS_CONFIG = {
+  new: { label: 'New', dotClass: 'dot-new' },
+  contacted: { label: 'Contacted', dotClass: 'dot-contacted' },
+  no_answer: { label: 'No Answer', dotClass: 'dot-no-answer' },
+  follow_up: { label: 'Follow Up', dotClass: 'dot-follow-up' },
+  converted: { label: 'Converted', dotClass: 'dot-converted' },
+  lost: { label: 'Lost', dotClass: 'dot-lost' },
+  deleted: { label: 'Deleted', dotClass: 'dot-deleted' }
+};
+
+export function toggleStatusFilterDropdown() {
+  if (!elements.leadStatusDropdownMenu) return;
+  const isShown = elements.leadStatusDropdownMenu.style.display === 'block';
+  if (isShown) {
+    closeStatusFilterDropdown();
+  } else {
+    openStatusFilterDropdown();
+  }
+}
+
+export function openStatusFilterDropdown() {
+  if (elements.leadStatusDropdownMenu) {
+    elements.leadStatusDropdownMenu.style.display = 'block';
+  }
+  if (elements.leadStatusDropdownBtn) {
+    elements.leadStatusDropdownBtn.setAttribute('aria-expanded', 'true');
+    elements.leadStatusDropdownBtn.classList.add('dropdown-open');
+  }
+}
+
+export function closeStatusFilterDropdown() {
+  if (elements.leadStatusDropdownMenu) {
+    elements.leadStatusDropdownMenu.style.display = 'none';
+  }
+  if (elements.leadStatusDropdownBtn) {
+    elements.leadStatusDropdownBtn.setAttribute('aria-expanded', 'false');
+    elements.leadStatusDropdownBtn.classList.remove('dropdown-open');
+  }
+}
 
 export function setupLeadsHandlers(renderConversationsView, openLeadChat, renderLeadsView) {
   // Search input
@@ -21,15 +61,73 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
     });
   }
 
-  // Filter Pills
-  document.querySelectorAll('.lead-filter-pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('.lead-filter-pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      state.leadsFilter = pill.dataset.filter;
+  // All Leads Filter Pill
+  if (elements.leadsFilterAllBtn) {
+    elements.leadsFilterAllBtn.addEventListener('click', () => {
+      state.leadsFilter = 'all';
+      state.leadsCurrentPage = 1;
+      closeStatusFilterDropdown();
       renderLeadsView(renderConversationsView, openLeadChat);
     });
+  }
+
+  // Status Filter Dropdown Toggle
+  if (elements.leadStatusDropdownBtn) {
+    elements.leadStatusDropdownBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleStatusFilterDropdown();
+    });
+  }
+
+  // Status Filter Dropdown Items
+  document.querySelectorAll('.status-dropdown-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const selectedStatus = item.dataset.status;
+      if (selectedStatus) {
+        state.leadsFilter = selectedStatus;
+        state.leadsCurrentPage = 1;
+        closeStatusFilterDropdown();
+        renderLeadsView(renderConversationsView, openLeadChat);
+      }
+    });
   });
+
+  // Global Outside Click to Close Status Dropdown
+  document.addEventListener('click', (e) => {
+    if (elements.leadStatusDropdownWrapper && !elements.leadStatusDropdownWrapper.contains(e.target)) {
+      closeStatusFilterDropdown();
+    }
+  });
+
+  // ESC to close Status Dropdown
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeStatusFilterDropdown();
+    }
+  });
+
+  // Lead Source Select Change (Show Custom Input when 'Other' is selected)
+  const sourceSelect = document.getElementById('newLeadSource');
+  const customSourceGroup = document.getElementById('newLeadCustomSourceGroup');
+  const customSourceInput = document.getElementById('newLeadCustomSource');
+
+  if (sourceSelect) {
+    sourceSelect.addEventListener('change', () => {
+      const isOther = sourceSelect.value === 'Other';
+      if (customSourceGroup) {
+        customSourceGroup.style.display = isOther ? 'block' : 'none';
+      }
+      if (customSourceInput) {
+        customSourceInput.required = isOther;
+        if (isOther) {
+          customSourceInput.focus();
+        } else {
+          customSourceInput.value = '';
+        }
+      }
+    });
+  }
 
   // Open Create Lead Modal
   if (elements.openAddLeadModalBtn) {
@@ -39,6 +137,14 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
         return;
       }
       populateLeadAssigneeOptions();
+      if (elements.createLeadForm) elements.createLeadForm.reset();
+      const countryCodeSelect = document.getElementById('newLeadCountryCode');
+      if (countryCodeSelect) countryCodeSelect.value = '+91';
+      if (customSourceGroup) customSourceGroup.style.display = 'none';
+      if (customSourceInput) {
+        customSourceInput.required = false;
+        customSourceInput.value = '';
+      }
       if (elements.addLeadModal) elements.addLeadModal.style.display = 'flex';
     });
   }
@@ -86,6 +192,12 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
     elements.leadNotesAddForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (checkUserDisabledAndEnforceLogout()) return;
+
+      if (!hasPermission('canAddNote')) {
+        showToast("Permission denied: You do not have permission to add notes.", "error");
+        return;
+      }
+
       const targetLeadId = state.activeNotesLeadId;
       if (!targetLeadId) return;
 
@@ -161,24 +273,59 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
     elements.createLeadForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (checkUserDisabledAndEnforceLogout()) return;
+
+      if (!hasPermission('canAddLead')) {
+        showToast("Permission denied: You do not have permission to add new leads.", "error");
+        if (elements.addLeadModal) elements.addLeadModal.style.display = 'none';
+        return;
+      }
+
       const nameInput = document.getElementById('newLeadName');
+      const countryCodeSelect = document.getElementById('newLeadCountryCode');
       const phoneInput = document.getElementById('newLeadPhone');
-      const platformSelect = document.getElementById('newLeadPlatform');
+      const sourceEl = document.getElementById('newLeadSource');
+      const customSourceEl = document.getElementById('newLeadCustomSource');
       const statusSelect = document.getElementById('newLeadStatus');
       const assigneeSelect = document.getElementById('newLeadAssignee');
       const noteInput = document.getElementById('newLeadNote');
 
       const name = nameInput ? nameInput.value.trim() : '';
-      const phone = phoneInput ? phoneInput.value.trim() : '';
-      const platform = 'CRM';
+      let rawPhone = phoneInput ? phoneInput.value.trim() : '';
+      const countryCode = countryCodeSelect ? countryCodeSelect.value.trim() : '+91';
+
+      let phone = rawPhone;
+      if (phone) {
+        if (phone.startsWith('+')) {
+          phone = phone.trim();
+        } else {
+          const cleanDigits = phone.replace(/^0+/, '').trim();
+          phone = `${countryCode} ${cleanDigits}`.trim();
+        }
+      }
+      const selectedSource = sourceEl ? sourceEl.value : '';
+      const customSource = customSourceEl ? customSourceEl.value.trim() : '';
       const status = statusSelect ? statusSelect.value : 'new';
       const assigneeId = assigneeSelect ? assigneeSelect.value : '';
       const initialNoteText = noteInput ? noteInput.value.trim() : '';
 
-      if (!name || !phone) {
+      if (!name || !rawPhone) {
         showToast('Please enter both Customer Name and Phone Number', 'warning');
         return;
       }
+
+      if (!selectedSource) {
+        showToast('Please select a Lead Source', 'warning');
+        if (sourceEl) sourceEl.focus();
+        return;
+      }
+
+      if (selectedSource === 'Other' && !customSource) {
+        showToast('Please specify the custom Source', 'warning');
+        if (customSourceEl) customSourceEl.focus();
+        return;
+      }
+
+      const finalSource = selectedSource === 'Other' ? customSource : selectedSource;
 
       const assignedUser = state.teamMembers ? state.teamMembers.find(u => u.id === assigneeId) : null;
       const assigneeName = assignedUser ? assignedUser.name : 'Unassigned';
@@ -197,8 +344,8 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
       const leadPayload = {
         name,
         phone,
-        platform: 'CRM',
-        source: 'CRM',
+        platform: finalSource,
+        source: finalSource,
         status,
         assigneeId: assigneeId || null,
         assigneeName,
@@ -235,6 +382,7 @@ export function setupLeadsHandlers(renderConversationsView, openLeadChat, render
 
         if (elements.addLeadModal) elements.addLeadModal.style.display = 'none';
         if (elements.createLeadForm) elements.createLeadForm.reset();
+        if (countryCodeSelect) countryCodeSelect.value = '+91';
 
         renderLeadsView(renderConversationsView, openLeadChat);
         if (renderConversationsView) renderConversationsView();
@@ -373,7 +521,27 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
       matchesFilter = status === leadsFilter;
     }
 
-    return matchesSearch && matchesFilter;
+    // Date Range Evaluation
+    let matchesDate = true;
+    const dateFilter = state.leadsDateFilter;
+    if (dateFilter && (dateFilter.startDate || dateFilter.endDate)) {
+      const leadDate = parseDate(lead.createdAt || lead.lastMessageAt || lead.updatedAt || lead.timestamp);
+      if (leadDate) {
+        const leadTime = leadDate.getTime();
+        if (dateFilter.startDate) {
+          const s = new Date(dateFilter.startDate);
+          s.setHours(0, 0, 0, 0);
+          if (leadTime < s.getTime()) matchesDate = false;
+        }
+        if (dateFilter.endDate && matchesDate) {
+          const e = new Date(dateFilter.endDate);
+          e.setHours(23, 59, 59, 999);
+          if (leadTime > e.getTime()) matchesDate = false;
+        }
+      }
+    }
+
+    return matchesSearch && matchesFilter && matchesDate;
   });
 
   // Update counters
@@ -385,7 +553,15 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
   const followUpCount = activeLeadsOnly.filter(l => (l.status || '').toLowerCase() === 'follow_up').length;
   const convertedCount = activeLeadsOnly.filter(l => (l.status || '').toLowerCase() === 'converted').length;
   const lostCount = activeLeadsOnly.filter(l => (l.status || '').toLowerCase() === 'lost').length;
-  let activeConversations = leads.filter(l => (l.status || '').toLowerCase() !== 'deleted');
+  const hasWhatsAppMessages = (l) => {
+    if (!l) return false;
+    if (l.hasWhatsAppMessages === false) return false;
+    if (l.hasWhatsAppMessages === true) return true;
+    if (l.initiatedBy === 'crm' && !l.hasAdminReplied) return false;
+    return (typeof l.lastMessage === 'string' && l.lastMessage.trim() !== '') ||
+           (typeof l.lastMessageText === 'string' && l.lastMessageText.trim() !== '');
+  };
+  let activeConversations = leads.filter(l => (l.status || '').toLowerCase() !== 'deleted' && hasWhatsAppMessages(l));
   if (isAgent) {
     activeConversations = activeConversations.filter(l => l.assigneeId === currentUser.id);
   }
@@ -393,6 +569,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
 
   if (elements.navLeadsCount) elements.navLeadsCount.textContent = activeCount;
   if (elements.navConversationsCount) elements.navConversationsCount.textContent = activeUnreadCount || activeConversations.length;
+
 
   if (elements.countAllLeads) elements.countAllLeads.textContent = activeCount;
   if (elements.countNewLeads) elements.countNewLeads.textContent = newCount;
@@ -403,12 +580,54 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
   if (elements.countLostLeads) elements.countLostLeads.textContent = lostCount;
   if (elements.countDeletedLeads) elements.countDeletedLeads.textContent = deletedCount;
 
-  // Sync active class on filter pill tabs
-  document.querySelectorAll('.lead-filter-pill').forEach(pill => {
-    if (pill.dataset.filter === leadsFilter) {
-      pill.classList.add('active');
+  // Toggle action buttons based on permissions
+  if (elements.openAddLeadModalBtn) {
+    elements.openAddLeadModalBtn.style.display = hasPermission('canAddLead') ? 'inline-flex' : 'none';
+  }
+  if (elements.btnExportExcel) {
+    elements.btnExportExcel.style.display = hasPermission('canExportExcel') ? 'inline-flex' : 'none';
+  }
+
+  // Sync active states on All Leads button & Status Dropdown Button
+  if (leadsFilter === 'all') {
+    if (elements.leadsFilterAllBtn) elements.leadsFilterAllBtn.classList.add('active');
+    if (elements.leadStatusDropdownBtn) {
+      elements.leadStatusDropdownBtn.classList.remove('active');
+      elements.leadStatusDropdownBtn.removeAttribute('data-filter');
+    }
+    if (elements.statusDropdownCurrentLabel) {
+      elements.statusDropdownCurrentLabel.textContent = 'Status';
+    }
+  } else if (STATUS_CONFIG[leadsFilter]) {
+    const config = STATUS_CONFIG[leadsFilter];
+    let selectedCount = 0;
+    if (leadsFilter === 'new') selectedCount = newCount;
+    else if (leadsFilter === 'contacted') selectedCount = contactedCount;
+    else if (leadsFilter === 'no_answer') selectedCount = noAnswerCount;
+    else if (leadsFilter === 'follow_up') selectedCount = followUpCount;
+    else if (leadsFilter === 'converted') selectedCount = convertedCount;
+    else if (leadsFilter === 'lost') selectedCount = lostCount;
+    else if (leadsFilter === 'deleted') selectedCount = deletedCount;
+
+    if (elements.leadsFilterAllBtn) elements.leadsFilterAllBtn.classList.remove('active');
+    if (elements.leadStatusDropdownBtn) {
+      elements.leadStatusDropdownBtn.classList.add('active');
+      elements.leadStatusDropdownBtn.setAttribute('data-filter', leadsFilter);
+    }
+    if (elements.statusDropdownCurrentLabel) {
+      elements.statusDropdownCurrentLabel.innerHTML = `
+        <span class="status-indicator-dot ${config.dotClass}"></span>
+        <span>${config.label} (${selectedCount})</span>
+      `;
+    }
+  }
+
+  // Update selected status in dropdown list
+  document.querySelectorAll('.status-dropdown-item').forEach(item => {
+    if (item.dataset.status === leadsFilter) {
+      item.classList.add('selected');
     } else {
-      pill.classList.remove('active');
+      item.classList.remove('selected');
     }
   });
 
@@ -443,6 +662,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
     const subtitle = lead.company || '';
     const handle = formatDisplayPhone(lead.handle || lead.phone || lead.id);
     const userFirstQuery = getUserFirstQuery(lead);
+    const hasChat = hasWhatsAppConversation(lead);
     const createdDateTime = formatFullDateTime(lead.createdAt || lead.lastMessageAt);
     const currentStatus = (lead.status || 'new').toLowerCase();
     const isDeleted = currentStatus === 'deleted';
@@ -458,7 +678,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
     return `
       <div class="lead-card-row ${isDisabledUser ? 'row-disabled' : ''}" data-lead-id="${escapeHtml(lead.id)}">
         <!-- 1. Name -->
-        <div class="lead-profile-col" style="cursor: pointer;" title="Open chat with ${escapeHtml(displayName)}">
+        <div class="lead-profile-col" style="${hasChat ? 'cursor: pointer;' : 'cursor: default;'}" title="${hasChat ? `Open chat with ${escapeHtml(displayName)}` : escapeHtml(displayName)}">
           <div class="lead-name-box">
             <span class="lead-name-title" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
             ${subtitle ? `<span class="lead-subtitle" title="${escapeHtml(subtitle)}">${escapeHtml(subtitle)}</span>` : ''}
@@ -471,19 +691,15 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
         </div>
 
         <!-- 3. User Query -->
-        <div class="lead-message-col" style="cursor: pointer;" title="Open chat with ${escapeHtml(displayName)}">
-          <div class="lead-quote-bubble" title="${escapeHtml(userFirstQuery)}">
+        <div class="lead-message-col" style="${hasChat ? 'cursor: pointer;' : 'cursor: default;'}" title="${hasChat ? `Open chat with ${escapeHtml(displayName)}` : ''}">
+          <div class="lead-quote-bubble ${!hasChat ? 'bubble-no-chat' : ''}" title="${escapeHtml(userFirstQuery)}">
             ${escapeHtml(userFirstQuery)}
           </div>
         </div>
 
-        <!-- 4. Platform -->
+        <!-- 4. Source -->
         <div class="lead-channel-col">
-          ${((lead.platform || lead.source || '').toUpperCase() === 'CRM') ? `
-            <span class="channel-pill crm"><i class="fa-solid fa-laptop"></i> CRM</span>
-          ` : `
-            <span class="channel-pill whatsapp"><i class="fa-brands fa-whatsapp"></i> WhatsApp</span>
-          `}
+          ${formatSourceBadge(lead.source || lead.platform, lead.referral)}
         </div>
 
         <!-- 5. Assigned -->
@@ -506,7 +722,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
 
         <!-- 6. Status -->
         <div class="lead-status-col">
-          <select class="lead-status-select status-${currentStatus}" data-lead-id="${escapeHtml(lead.id)}" ${isDeleted || isDisabledUser ? 'disabled' : ''}>
+          <select class="lead-status-select status-${currentStatus}" data-lead-id="${escapeHtml(lead.id)}" ${isDeleted || isDisabledUser || !hasPermission('canChangeStatus') ? 'disabled' : ''} ${!hasPermission('canChangeStatus') ? 'title="You do not have permission to change lead status" style="cursor: not-allowed;"' : ''}>
             ${isDeleted ? `<option value="deleted" selected disabled>Deleted</option>` : ''}
             <option value="new" ${currentStatus === 'new' ? 'selected' : ''}>New</option>
             <option value="contacted" ${currentStatus === 'contacted' ? 'selected' : ''}>Contacted</option>
@@ -521,11 +737,13 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
         <div class="lead-notes-col">
           <div class="lead-note-badge ${latestNoteText ? 'has-note' : 'no-note'}" data-lead-id="${escapeHtml(lead.id)}" title="${escapeHtml(noteTooltip)}">
             <i class="fa-regular fa-note-sticky note-icon"></i>
-            <span class="note-text">${escapeHtml(latestNoteText || '+ Add note')}</span>
+            <span class="note-text">${escapeHtml(latestNoteText || (hasPermission('canAddNote') ? '+ Add note' : 'No notes'))}</span>
             ${notesList.length > 1 ? `<span class="note-count-pill" title="${notesList.length} total notes">${notesList.length}</span>` : ''}
-            <button type="button" class="btn-note-edit" data-lead-id="${escapeHtml(lead.id)}" title="View notes history & add note">
-              <i class="fa-solid fa-pen"></i>
-            </button>
+            ${hasPermission('canAddNote') ? `
+              <button type="button" class="btn-note-edit" data-lead-id="${escapeHtml(lead.id)}" title="View notes history & add note">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+            ` : ''}
           </div>
         </div>
 
@@ -536,8 +754,12 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
 
         <!-- 9. Action -->
         <div class="lead-actions-col">
-          ${(isDeleted || isDisabledUser || !hasPermission('canDeleteLead')) ? '' : `
-            <button class="btn-lead-delete" data-action="delete" data-lead-id="${escapeHtml(lead.id)}" title="Delete lead">
+          ${isDeleted ? '' : `
+            <button class="btn-lead-delete ${(!hasPermission('canDeleteLead') || isDisabledUser) ? 'disabled' : ''}" 
+                    data-action="delete" 
+                    data-lead-id="${escapeHtml(lead.id)}" 
+                    ${(!hasPermission('canDeleteLead') || isDisabledUser) ? 'disabled style="cursor: not-allowed; opacity: 0.45;"' : ''} 
+                    title="${!hasPermission('canDeleteLead') ? 'You do not have permission to delete leads' : 'Delete lead'}">
               <i class="fa-regular fa-trash-can"></i>
             </button>
           `}
@@ -568,13 +790,16 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
     });
   });
 
-  // Row Profile / Query Click to open chat
+  // Row Profile / Query Click to open chat (only if lead has WhatsApp conversation)
   elements.leadsCardsList.querySelectorAll('.lead-profile-col, .lead-message-col').forEach(col => {
     col.addEventListener('click', (e) => {
       e.stopPropagation();
       const row = col.closest('.lead-card-row');
       if (row && row.dataset.leadId && openLeadChat) {
-        openLeadChat(row.dataset.leadId);
+        const lead = state.leads.find(l => l.id === row.dataset.leadId);
+        if (lead && hasWhatsAppConversation(lead)) {
+          openLeadChat(row.dataset.leadId);
+        }
       }
     });
   });
@@ -731,6 +956,12 @@ export function openLeadNotesModal(leadId, renderLeadsView, renderConversationsV
     elements.leadNotesModalSubtitle.textContent = `Phone: ${phoneDisplay}`;
   }
 
+  // Toggle Add Note form based on canAddNote permission
+  const canAddNote = hasPermission('canAddNote');
+  if (elements.leadNotesAddForm) {
+    elements.leadNotesAddForm.style.display = canAddNote ? 'block' : 'none';
+  }
+
   // Clear input box so user can type a fresh note
   if (elements.leadNotesInput) {
     elements.leadNotesInput.value = '';
@@ -744,7 +975,7 @@ export function openLeadNotesModal(leadId, renderLeadsView, renderConversationsV
   }
 
   setTimeout(() => {
-    if (elements.leadNotesInput) {
+    if (canAddNote && elements.leadNotesInput) {
       elements.leadNotesInput.focus();
     }
   }, 100);
@@ -835,5 +1066,33 @@ export function renderLeadsPagination(totalRecords, totalPages, renderConversati
         renderLeadsView(renderConversationsView, openLeadChat);
       };
     });
+  }
+}
+
+/**
+ * Format Source pill badge with appropriate icons and style
+ */
+export function formatSourceBadge(sourceValue, referral = null) {
+  // If referral metadata exists from a Meta Ad (or source explicitly set to Meta Ads)
+  if (referral || (typeof sourceValue === 'string' && (sourceValue.toLowerCase().includes('meta') || sourceValue.toLowerCase().includes('ad')))) {
+    const headline = referral && (referral.headline || referral.title) ? ` - ${referral.headline}` : '';
+    return `<span class="channel-pill meta-ads" title="Source: Meta Ads${escapeHtml(headline)}"><i class="fa-brands fa-meta"></i> Meta Ads</span>`;
+  }
+
+  const raw = (sourceValue || 'Direct WhatsApp').trim();
+  const lower = raw.toLowerCase();
+
+  if (lower === 'whatsapp' || lower.includes('direct whatsapp')) {
+    return `<span class="channel-pill whatsapp" title="Source: Direct WhatsApp"><i class="fa-brands fa-whatsapp"></i> Direct WhatsApp</span>`;
+  } else if (lower.includes('website')) {
+    return `<span class="channel-pill website" title="Source: ${escapeHtml(raw)}"><i class="fa-solid fa-globe"></i> ${escapeHtml(raw)}</span>`;
+  } else if (lower.includes('message')) {
+    return `<span class="channel-pill message" title="Source: ${escapeHtml(raw)}"><i class="fa-solid fa-comment-dots"></i> ${escapeHtml(raw)}</span>`;
+  } else if (lower.includes('call') || lower.includes('phone')) {
+    return `<span class="channel-pill phone" title="Source: ${escapeHtml(raw)}"><i class="fa-solid fa-phone"></i> ${escapeHtml(raw)}</span>`;
+  } else if (lower === 'crm') {
+    return `<span class="channel-pill crm" title="Source: CRM"><i class="fa-solid fa-laptop"></i> CRM</span>`;
+  } else {
+    return `<span class="channel-pill custom-source" title="Source: ${escapeHtml(raw)}"><i class="fa-solid fa-tag"></i> ${escapeHtml(raw)}</span>`;
   }
 }

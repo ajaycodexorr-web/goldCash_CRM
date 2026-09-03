@@ -1,72 +1,85 @@
 /**
- * Settings, Change Password & Role-Based Permissions Component
- * Super Admin has full control and manages Sub Admin & Maker permissions.
+ * Settings, Change Password & Role-Based Permissions Component (RBAC)
+ * Fixed to 3 Roles: Super Admin, Sub Admin, Maker
  */
 
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { escapeHtml, getInitials } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
-import { changeOwnPassword, updateUserPermissions, getUserPermissions, hasPermission, DEFAULT_PERMISSIONS } from '../services/user-service.js';
+import {
+  changeOwnPassword,
+  getAllRoles,
+  getRoleById,
+  updateRolePermissions,
+  assignUserRole,
+  getUserPermissions,
+  hasPermission,
+  PERMISSION_DEFINITIONS,
+  PERMISSION_CATEGORIES
+} from '../services/user-service.js';
 import { addAuditLog } from '../services/logging-service.js';
 
 let isSubmittingPassword = false;
-let isSavingPermissions = false;
-let selectedPermUserId = null;
-
-const PERMISSION_KEYS = [
-  'canAddLead',
-  'canDeleteLead',
-  'canSendMessage',
-  'canAddNote',
-  'canExportExcel',
-  'canAssignLead',
-  'canViewLogs',
-  'canViewTeams',
-  'canChangePassword',
-  'canManagePermissions'
-];
+let currentRbacRoleFilter = 'all';
+let currentRbacSearch = '';
+let activeRbacTab = 'assign'; // 'assign' or 'definitions'
+let editingRoleId = null;
 
 export function setupSettingsView(onUserUpdated) {
   setupTabs();
   setupPasswordToggleListeners();
   setupPasswordFormListeners(onUserUpdated);
-  setupPermissionsTabListeners(onUserUpdated);
+  setupRbacListeners(onUserUpdated);
   renderSettingsView();
 }
 
 /**
- * Switch tabs between Account & Security and User Permissions
+ * Switch tabs between Account / Change Password and Roles & Permissions
  */
-function setupTabs() {
+export function switchSettingsTab(tabName) {
   const tabBtnAccount = document.getElementById('settingsTabBtnAccount');
   const tabBtnPermissions = document.getElementById('settingsTabBtnPermissions');
   const paneAccount = document.getElementById('settingsAccountTabPane');
-  const panePermissions = document.getElementById('settingsPermissionsTabPane');
+  const subItemPassword = document.getElementById('navSubItemPassword');
+  const subItemPermissions = document.getElementById('navSubItemPermissions');
+  const settingsGroupWrapper = document.getElementById('navSettingsGroupWrapper');
 
-  const switchSettingsTab = (tabName) => {
-    if (tabBtnAccount) {
-      const isAccount = tabName === 'account';
-      tabBtnAccount.classList.toggle('active', isAccount);
-      tabBtnAccount.style.color = isAccount ? 'var(--crm-primary)' : '#64748b';
-      tabBtnAccount.style.borderBottomColor = isAccount ? 'var(--crm-primary)' : 'transparent';
-    }
+  const isAccount = tabName === 'account' || tabName === 'password';
+  const isPerm = tabName === 'permissions';
 
-    if (tabBtnPermissions) {
-      const isPerm = tabName === 'permissions';
-      tabBtnPermissions.classList.toggle('active', isPerm);
-      tabBtnPermissions.style.color = isPerm ? 'var(--crm-primary)' : '#64748b';
-      tabBtnPermissions.style.borderBottomColor = isPerm ? 'var(--crm-primary)' : 'transparent';
-    }
+  // Ensure settings group in sidebar is open
+  if (settingsGroupWrapper) {
+    settingsGroupWrapper.classList.add('open');
+  }
 
-    if (paneAccount) paneAccount.style.display = tabName === 'account' ? 'block' : 'none';
-    if (panePermissions) {
-      panePermissions.style.display = tabName === 'permissions' ? 'block' : 'none';
-      if (tabName === 'permissions') {
-        renderPermissionsTab();
-      }
-    }
-  };
+  // Sync Sidebar Sub-items
+  if (subItemPassword) subItemPassword.classList.toggle('active', isAccount);
+  if (subItemPermissions) subItemPermissions.classList.toggle('active', isPerm);
+
+  // Sync Top Tabs
+  if (tabBtnAccount) {
+    tabBtnAccount.classList.toggle('active', isAccount);
+    tabBtnAccount.style.color = isAccount ? 'var(--crm-primary)' : '#64748b';
+    tabBtnAccount.style.borderBottomColor = isAccount ? 'var(--crm-primary)' : 'transparent';
+  }
+
+  if (tabBtnPermissions) {
+    tabBtnPermissions.classList.toggle('active', isPerm);
+    tabBtnPermissions.style.color = isPerm ? 'var(--crm-primary)' : '#64748b';
+    tabBtnPermissions.style.borderBottomColor = isPerm ? 'var(--crm-primary)' : 'transparent';
+  }
+
+  if (paneAccount) paneAccount.style.display = isAccount ? 'block' : 'none';
+
+  if (isPerm) {
+    renderRbacView();
+  }
+}
+
+function setupTabs() {
+  const tabBtnAccount = document.getElementById('settingsTabBtnAccount');
+  const tabBtnPermissions = document.getElementById('settingsTabBtnPermissions');
 
   if (tabBtnAccount) tabBtnAccount.addEventListener('click', () => switchSettingsTab('account'));
   if (tabBtnPermissions) tabBtnPermissions.addEventListener('click', () => switchSettingsTab('permissions'));
@@ -80,9 +93,14 @@ export function renderSettingsView() {
   const isSuperAdmin = current.role === 'super_admin' || current.role === 'admin';
   const isSubAdmin = current.role === 'sub_admin';
   const canManagePerms = isSuperAdmin || (isSubAdmin && hasPermission('canManagePermissions', current));
+  const canChangePass = hasPermission('canChangePassword', current);
 
-  // Toggle Permissions Tab button visibility (Super Admin or authorized Sub Admin)
+  // Toggle Top Tab buttons
+  const tabBtnAccount = document.getElementById('settingsTabBtnAccount');
   const tabBtnPermissions = document.getElementById('settingsTabBtnPermissions');
+  if (tabBtnAccount) {
+    tabBtnAccount.style.display = canChangePass ? 'flex' : 'none';
+  }
   if (tabBtnPermissions) {
     tabBtnPermissions.style.display = canManagePerms ? 'flex' : 'none';
     const roleBadge = tabBtnPermissions.querySelector('.user-role-badge');
@@ -90,14 +108,17 @@ export function renderSettingsView() {
       roleBadge.textContent = isSuperAdmin ? 'Super Admin' : 'Sub Admin';
       roleBadge.className = `user-role-badge ${isSuperAdmin ? 'super_admin' : 'sub_admin'}`;
     }
+  }
 
-    if (!canManagePerms) {
-      // If user lacks permission, force back to account tab
-      const paneAccount = document.getElementById('settingsAccountTabPane');
-      const panePermissions = document.getElementById('settingsPermissionsTabPane');
-      if (paneAccount) paneAccount.style.display = 'block';
-      if (panePermissions) panePermissions.style.display = 'none';
-    }
+  // Sidebar Permissions Sub-item visibility
+  const subItemPermissions = document.getElementById('navSubItemPermissions');
+  const navPermBadge = document.getElementById('navPermBadge');
+  if (subItemPermissions) {
+    subItemPermissions.style.display = canManagePerms ? 'flex' : 'none';
+  }
+  if (navPermBadge) {
+    navPermBadge.textContent = isSuperAdmin ? 'Admin' : 'Sub Admin';
+    navPermBadge.className = `user-role-badge ${isSuperAdmin ? 'super_admin' : 'sub_admin'} nav-sub-badge`;
   }
 
   // Profile Avatar
@@ -149,17 +170,9 @@ export function renderSettingsView() {
   // Profile Role Badge
   const roleEl = elements.settingsProfileRole || document.getElementById('settingsProfileRole');
   if (roleEl) {
-    let roleText = 'MAKER';
-    let roleClass = 'maker';
-    if (current.role === 'super_admin' || current.role === 'admin') {
-      roleText = 'SUPER ADMIN';
-      roleClass = 'super_admin';
-    } else if (current.role === 'sub_admin') {
-      roleText = 'SUB ADMIN';
-      roleClass = 'sub_admin';
-    }
-    roleEl.textContent = roleText;
-    roleEl.className = `user-role-badge ${roleClass}`;
+    const roleObj = getRoleById(current.role);
+    roleEl.textContent = (roleObj ? roleObj.name : current.role).toUpperCase();
+    roleEl.className = `user-role-badge ${roleObj ? roleObj.badgeClass : 'maker'}`;
   }
 
   // Profile Status
@@ -170,20 +183,19 @@ export function renderSettingsView() {
     statusEl.style.color = isActive ? '#10b981' : '#ef4444';
   }
 
-  // Role Description
-  const roleDescEl = elements.settingsProfileRoleDesc || document.getElementById('settingsProfileRoleDesc');
+  // Profile Role Access Description
+  const roleDescEl = document.getElementById('settingsProfileRoleDesc');
   if (roleDescEl) {
-    if (current.role === 'super_admin' || current.role === 'admin') {
-      roleDescEl.textContent = 'Super Administrator (Full System Control)';
-    } else if (current.role === 'sub_admin') {
-      roleDescEl.textContent = 'Sub Administrator';
+    if (isSuperAdmin) {
+      roleDescEl.textContent = 'Full Access';
+    } else if (isSubAdmin) {
+      roleDescEl.textContent = 'Sub Admin';
     } else {
-      roleDescEl.textContent = 'Maker (Lead & Chat Agent)';
+      roleDescEl.textContent = 'Maker (Role Limited)';
     }
   }
 
   // Check if current user has permission to change password
-  const canChangePass = hasPermission('canChangePassword', current);
   const passNotice = document.getElementById('passwordDisabledNotice');
   const passForm = elements.changePasswordForm || document.getElementById('changePasswordForm');
 
@@ -194,9 +206,8 @@ export function renderSettingsView() {
     });
   }
 
-  // If user has access to Permissions tab, refresh permissions view
   if (canManagePerms) {
-    renderPermissionsTab();
+    renderRbacView();
   }
 }
 
@@ -258,14 +269,12 @@ function setupPasswordFormListeners(onUserUpdated) {
       const newPass = newInput ? newInput.value.trim() : '';
       const confirmPass = confirmInput ? confirmInput.value.trim() : '';
 
-      // 1. Mandatory Old Password Check
       if (!oldPass) {
         showAlert(alertBox, 'Current (Old) Password is required.', 'error');
         if (oldInput) oldInput.focus();
         return;
       }
 
-      // 2. New Password Checks
       if (!newPass) {
         showAlert(alertBox, 'Please enter a new password.', 'error');
         if (newInput) newInput.focus();
@@ -278,14 +287,12 @@ function setupPasswordFormListeners(onUserUpdated) {
         return;
       }
 
-      // 3. Confirm Password Match Check
       if (newPass !== confirmPass) {
         showAlert(alertBox, 'New password and Confirm password do not match.', 'error');
         if (confirmInput) confirmInput.focus();
         return;
       }
 
-      // 4. Check if new password is identical to old password
       if (oldPass === newPass) {
         showAlert(alertBox, 'New password cannot be identical to your old password.', 'warning');
         if (newInput) newInput.focus();
@@ -328,206 +335,375 @@ function setupPasswordFormListeners(onUserUpdated) {
   }
 }
 
-/**
- * Setup Permissions Tab Interactivity (Select All, Revoke All, Reset Defaults, Save)
- */
-function setupPermissionsTabListeners(onUserUpdated) {
-  const userSelect = document.getElementById('permUserSelect');
-  const form = document.getElementById('userPermissionsForm');
-  const btnSelectAll = document.getElementById('btnPermSelectAll');
-  const btnRevokeAll = document.getElementById('btnPermRevokeAll');
-  const btnResetDefault = document.getElementById('btnPermResetDefault');
-  const saveBtn = document.getElementById('savePermissionsBtn');
+// ==========================================================================
+// Roles & Permissions (RBAC) Listeners & Rendering
+// ==========================================================================
+function setupRbacListeners(onUserUpdated) {
+  // 1. View Switcher Tabs (Assign Roles vs Role Definitions)
+  const tabAssign = document.getElementById('rbacTabBtnAssign');
+  const tabDef = document.getElementById('rbacTabBtnDefinitions');
+  const paneAssign = document.getElementById('rbacAssignRolesPane');
+  const paneDef = document.getElementById('rbacRoleDefinitionsPane');
 
-  if (userSelect) {
-    userSelect.addEventListener('change', () => {
-      selectedPermUserId = userSelect.value;
-      populateUserPermissionsForm();
+  if (tabAssign && tabDef) {
+    tabAssign.addEventListener('click', () => {
+      activeRbacTab = 'assign';
+      tabAssign.classList.add('active');
+      tabDef.classList.remove('active');
+      if (paneAssign) paneAssign.style.display = 'block';
+      if (paneDef) paneDef.style.display = 'none';
+      renderRbacView();
+    });
+
+    tabDef.addEventListener('click', () => {
+      activeRbacTab = 'definitions';
+      tabDef.classList.add('active');
+      tabAssign.classList.remove('active');
+      if (paneAssign) paneAssign.style.display = 'none';
+      if (paneDef) paneDef.style.display = 'block';
+      renderRbacRoleDefinitions();
     });
   }
 
-  if (btnSelectAll) {
-    btnSelectAll.addEventListener('click', () => {
-      PERMISSION_KEYS.forEach(key => {
-        const checkbox = document.getElementById(`perm_${key}`);
-        if (checkbox) checkbox.checked = true;
+  // 2. Role Filter Pills
+  const pillsContainer = document.getElementById('rbacRoleFilterPills');
+  if (pillsContainer) {
+    pillsContainer.addEventListener('click', (e) => {
+      const pillBtn = e.target.closest('.rbac-filter-pill');
+      if (!pillBtn) return;
+
+      currentRbacRoleFilter = pillBtn.dataset.role || 'all';
+      pillsContainer.querySelectorAll('.rbac-filter-pill').forEach(btn => {
+        btn.classList.toggle('active', btn === pillBtn);
       });
+
+      renderRbacUsersTable();
     });
   }
 
-  if (btnRevokeAll) {
-    btnRevokeAll.addEventListener('click', () => {
-      PERMISSION_KEYS.forEach(key => {
-        const checkbox = document.getElementById(`perm_${key}`);
-        if (checkbox) checkbox.checked = false;
-      });
+  // 3. User Search Input in Assign Roles
+  const searchInput = document.getElementById('rbacUserSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      currentRbacSearch = (e.target.value || '').trim().toLowerCase();
+      renderRbacUsersTable();
     });
   }
 
-  if (btnResetDefault) {
-    btnResetDefault.addEventListener('click', () => {
-      const targetUser = (state.teamMembers || []).find(u => u.id === selectedPermUserId);
-      if (!targetUser) return;
-      const role = targetUser.role || 'maker';
-      const defaults = DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.maker;
-      PERMISSION_KEYS.forEach(key => {
-        const checkbox = document.getElementById(`perm_${key}`);
-        if (checkbox) checkbox.checked = !!defaults[key];
-      });
-    });
-  }
+  // 4. Role Permissions Modal Listeners
+  const modalRolePerm = document.getElementById('rolePermissionsModal');
+  const closeRolePermBtn = document.getElementById('closeRolePermModalBtn');
+  const cancelRolePermBtn = document.getElementById('cancelRolePermModalBtn');
+  const saveRolePermBtn = document.getElementById('saveRolePermsBtn');
 
-  if (form) {
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (isSavingPermissions || !selectedPermUserId) return;
+  const closeRoleModal = () => {
+    if (modalRolePerm) modalRolePerm.style.display = 'none';
+    editingRoleId = null;
+  };
 
-      const targetUser = (state.teamMembers || []).find(u => u.id === selectedPermUserId);
-      if (!targetUser) {
-        showToast('Please select a valid user first', 'warning');
-        return;
-      }
+  if (closeRolePermBtn) closeRolePermBtn.addEventListener('click', closeRoleModal);
+  if (cancelRolePermBtn) cancelRolePermBtn.addEventListener('click', closeRoleModal);
+
+  if (saveRolePermBtn) {
+    saveRolePermBtn.addEventListener('click', () => {
+      if (!editingRoleId) return;
+
+      const bodyEl = document.getElementById('rolePermModalBody');
+      if (!bodyEl) return;
 
       const newPerms = {};
-      PERMISSION_KEYS.forEach(key => {
-        const checkbox = document.getElementById(`perm_${key}`);
-        newPerms[key] = checkbox ? checkbox.checked : false;
+      bodyEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        newPerms[cb.dataset.permId] = cb.checked;
       });
 
       try {
-        isSavingPermissions = true;
-        if (saveBtn) {
-          saveBtn.disabled = true;
-          saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
-        }
-
-        const updated = await updateUserPermissions(selectedPermUserId, newPerms);
-
+        const updatedRole = updateRolePermissions(editingRoleId, newPerms);
+        showToast(`Permissions updated for ${updatedRole.name}!`, 'info');
         addAuditLog(
-          'permissions_updated',
+          'role_permissions_updated',
           '',
-          updated.name,
-          `Super Admin updated permissions for ${updated.name} (${(updated.role || 'user').toUpperCase()})`
+          state.currentUser ? state.currentUser.name : 'Super Admin',
+          `Super Admin updated permissions for role: ${updatedRole.name}`
         );
-
-        showToast(`Permissions updated for ${updated.name}!`, 'info');
-
-        if (onUserUpdated) onUserUpdated(updated);
+        closeRoleModal();
+        renderRbacView();
+        if (onUserUpdated) onUserUpdated(state.currentUser);
       } catch (err) {
-        showToast(err.message || 'Could not save permissions', 'error');
-      } finally {
-        isSavingPermissions = false;
-        if (saveBtn) {
-          saveBtn.disabled = false;
-          saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Permissions';
-        }
+        showToast(err.message || 'Could not update role permissions', 'error');
       }
     });
   }
 }
 
 /**
- * Render the Permissions Tab (Populates user list & current permissions)
+ * Render the entire Roles & Permissions View
  */
-export function renderPermissionsTab() {
-  const userSelect = document.getElementById('permUserSelect');
-  const emptyState = document.getElementById('permNoUsersEmptyState');
-  const controlsContainer = document.getElementById('permControlsContainer');
-  if (!userSelect) return;
-
-  const current = state.currentUser || { id: 'usr_admin', name: 'Super Admin', role: 'super_admin' };
-  const isSuperAdmin = current.role === 'super_admin' || current.role === 'admin';
-  const isSubAdmin = current.role === 'sub_admin';
-
-  // Super Admin can manage both Sub Admins & Makers
-  // Sub Admin (with canManagePermissions) can ONLY view and manage Makers (never own self or other sub admins)
-  let subUsers = [];
-  if (isSuperAdmin) {
-    subUsers = (state.teamMembers || []).filter(u => u.role !== 'super_admin' && u.role !== 'admin');
-  } else if (isSubAdmin && hasPermission('canManagePermissions', current)) {
-    subUsers = (state.teamMembers || []).filter(u => (u.role === 'maker' || u.role === 'agent') && u.id !== current.id);
+export function renderRbacView() {
+  updateRbacPillCounts();
+  if (activeRbacTab === 'assign') {
+    renderRbacUsersTable();
+  } else {
+    renderRbacRoleDefinitions();
   }
-
-  const userBadge = document.getElementById('permSelectedUserBadge');
-  const emptyTitle = emptyState ? emptyState.querySelector('h3') : null;
-  const emptyDesc = emptyState ? emptyState.querySelector('p') : null;
-
-  if (subUsers.length === 0) {
-    if (emptyState) emptyState.style.display = 'block';
-    if (controlsContainer) controlsContainer.style.display = 'none';
-    if (userBadge) userBadge.style.display = 'none';
-    if (emptyTitle) {
-      emptyTitle.textContent = isSubAdmin ? 'No Makers Created Yet' : 'No Sub-Users Created Yet';
-    }
-    if (emptyDesc) {
-      emptyDesc.textContent = isSubAdmin 
-        ? 'As a Sub Admin, you can configure permissions for Makers. Create a Maker in the Team tab to manage their access.'
-        : 'Create Sub Admins or Makers in the Team Management tab to configure their permissions.';
-    }
-    userSelect.innerHTML = isSubAdmin ? '<option value="">No Makers available</option>' : '<option value="">No sub-users available</option>';
-    userSelect.disabled = true;
-    selectedPermUserId = null;
-    return;
-  }
-
-  if (emptyState) emptyState.style.display = 'none';
-  if (controlsContainer) controlsContainer.style.display = 'block';
-  if (userBadge) userBadge.style.display = 'flex';
-  userSelect.disabled = false;
-
-  // Populate Select Options
-  userSelect.innerHTML = subUsers.map(u => {
-    const roleText = u.role === 'sub_admin' ? 'Sub Admin' : 'Maker';
-    return `<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)} (${roleText} - ${escapeHtml(u.email)})</option>`;
-  }).join('');
-
-  // Default to first user or keep currently selected if still valid in the filtered list
-  if (!selectedPermUserId || !subUsers.some(u => u.id === selectedPermUserId)) {
-    selectedPermUserId = subUsers[0].id;
-  }
-  userSelect.value = selectedPermUserId;
-
-  populateUserPermissionsForm();
 }
 
 /**
- * Populate checkbox values for the selected user
+ * Update filter pill counts dynamically based on users
  */
-function populateUserPermissionsForm() {
-  const targetUser = (state.teamMembers || []).find(u => u.id === selectedPermUserId);
-  if (!targetUser) return;
+function updateRbacPillCounts() {
+  const users = state.teamMembers || [];
 
-  // Update User Banner Badge
-  const avatarEl = document.getElementById('permUserAvatar');
-  const nameEl = document.getElementById('permUserName');
-  const roleBadgeEl = document.getElementById('permUserRoleBadge');
+  const countAll = users.length;
+  const countSuper = users.filter(u => u.role === 'super_admin' || u.role === 'admin').length;
+  const countSub = users.filter(u => u.role === 'sub_admin').length;
+  const countMaker = users.filter(u => u.role === 'maker' || u.role === 'agent').length;
 
-  if (avatarEl) {
-    avatarEl.textContent = getInitials(targetUser.name);
-    avatarEl.className = `user-avatar-initials ${targetUser.role === 'maker' ? 'agent-avatar' : ''}`;
-  }
+  const setPill = (id, count) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = count;
+  };
 
-  if (nameEl) nameEl.textContent = targetUser.name || 'User';
-  if (roleBadgeEl) {
-    const roleText = targetUser.role === 'sub_admin' ? 'SUB ADMIN' : 'MAKER';
-    roleBadgeEl.textContent = roleText;
-    roleBadgeEl.className = `user-role-badge ${targetUser.role}`;
-  }
+  setPill('rbacPillCount_all', countAll);
+  setPill('rbacPillCount_super_admin', countSuper);
+  setPill('rbacPillCount_sub_admin', countSub);
+  setPill('rbacPillCount_maker', countMaker);
+}
 
-  // "Can Manage Permissions" is only configurable for Sub Admins (by Super Admin)
-  const manageCard = document.getElementById('permCard_canManagePermissions');
-  if (manageCard) {
-    manageCard.style.display = targetUser.role === 'sub_admin' ? 'flex' : 'none';
-  }
+/**
+ * Render the Assign Roles Users Table
+ */
+export function renderRbacUsersTable() {
+  const tbody = document.getElementById('rbacUsersTableBody');
+  const countLabel = document.getElementById('rbacUserCountLabel');
+  if (!tbody) return;
 
-  // Populate Checkboxes
-  const perms = getUserPermissions(targetUser);
-  PERMISSION_KEYS.forEach(key => {
-    const checkbox = document.getElementById(`perm_${key}`);
-    if (checkbox) {
-      checkbox.checked = perms[key] === true;
+  const users = state.teamMembers || [];
+  const roles = getAllRoles();
+
+  let filtered = users.filter(u => {
+    if (currentRbacRoleFilter !== 'all') {
+      if (currentRbacRoleFilter === 'super_admin' && (u.role !== 'super_admin' && u.role !== 'admin')) return false;
+      if (currentRbacRoleFilter === 'sub_admin' && u.role !== 'sub_admin') return false;
+      if (currentRbacRoleFilter === 'maker' && (u.role !== 'maker' && u.role !== 'agent')) return false;
     }
+
+    if (currentRbacSearch) {
+      const q = currentRbacSearch;
+      const matchName = (u.name || '').toLowerCase().includes(q);
+      const matchEmail = (u.email || '').toLowerCase().includes(q);
+      if (!matchName && !matchEmail) return false;
+    }
+
+    return true;
   });
+
+  if (countLabel) {
+    countLabel.textContent = `${filtered.length} user${filtered.length === 1 ? '' : 's'}`;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" style="text-align: center; padding: 40px; color: #94a3b8;">
+          <i class="fa-solid fa-user-xmark" style="font-size: 28px; margin-bottom: 10px; display: block; opacity: 0.5;"></i>
+          <strong>No matching users found</strong>
+          <p style="font-size: 12px; margin-top: 4px; color: #a8a29e;">Try adjusting your role filter or search query.</p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(user => {
+    const initials = getInitials(user.name);
+    const isActive = user.status !== 'disabled';
+    const currentRoleId = user.role === 'admin' ? 'super_admin' : (user.role === 'agent' ? 'maker' : user.role);
+    const roleObj = getRoleById(currentRoleId);
+    const totalPerms = PERMISSION_DEFINITIONS.length; // 11
+    const grantedCount = currentRoleId === 'super_admin' 
+      ? totalPerms 
+      : Object.values(roleObj.permissions || {}).filter(Boolean).length;
+
+    const isPrimarySuperAdmin = user.id === 'usr_admin' || currentRoleId === 'super_admin';
+    const assignableRoles = roles.filter(r => r.id !== 'super_admin');
+    const roleOptions = assignableRoles.map(r => {
+      const isSelected = r.id === currentRoleId;
+      return `<option value="${escapeHtml(r.id)}" ${isSelected ? 'selected' : ''}>${escapeHtml(r.name)}</option>`;
+    }).join('');
+
+    return `
+      <tr data-user-id="${escapeHtml(user.id)}">
+        <td>
+          <div class="rbac-user-cell">
+            <div class="rbac-user-avatar">${escapeHtml(initials)}</div>
+            <div class="rbac-user-info">
+              <span class="rbac-user-name">${escapeHtml(user.name || 'User')}</span>
+              <span class="rbac-user-status ${isActive ? 'active' : 'disabled'}">${isActive ? 'ACTIVE' : 'DISABLED'}</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span style="color: #64748b; font-weight: 500;">${escapeHtml(user.email || '—')}</span>
+        </td>
+        <td>
+          <button type="button" class="btn-view-user-perms ${currentRoleId === 'super_admin' ? 'super' : ''}" data-role-id="${escapeHtml(currentRoleId)}" title="Click to inspect role permissions">
+            <i class="fa-solid ${currentRoleId === 'super_admin' ? 'fa-shield-check' : 'fa-shield-halved'}"></i>
+            <span>${grantedCount}/${totalPerms} Permissions</span>
+          </button>
+        </td>
+        <td>
+          ${isPrimarySuperAdmin ? `
+            <span class="user-role-badge super_admin" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; font-size: 11px;">
+              <i class="fa-solid fa-lock" style="font-size: 10px;"></i> SUPER ADMIN
+            </span>
+          ` : `
+            <select class="rbac-role-select" data-user-id="${escapeHtml(user.id)}">
+              ${roleOptions}
+            </select>
+          `}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Attach role select change listeners
+  tbody.querySelectorAll('.rbac-role-select').forEach(select => {
+    select.addEventListener('change', async () => {
+      const userId = select.dataset.userId;
+      const newRoleId = select.value;
+
+      try {
+        const updated = await assignUserRole(userId, newRoleId);
+        const roleObj = getRoleById(newRoleId);
+        showToast(`Assigned ${updated.name} to role "${roleObj.name}"!`, 'info');
+        addAuditLog(
+          'user_role_assigned',
+          '',
+          updated.name,
+          `Super Admin assigned role "${roleObj.name}" to ${updated.name}`
+        );
+        updateRbacPillCounts();
+        renderRbacUsersTable();
+      } catch (err) {
+        showToast(err.message || 'Could not assign role', 'error');
+        renderRbacUsersTable();
+      }
+    });
+  });
+
+  // Attach View Permissions click on the Permissions column
+  tbody.querySelectorAll('.btn-view-user-perms').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const roleId = btn.dataset.roleId;
+      openRolePermissionsModal(roleId);
+    });
+  });
+}
+
+/**
+ * Render the Role Definitions Cards list
+ */
+export function renderRbacRoleDefinitions() {
+  const container = document.getElementById('rbacRoleCardsList');
+  if (!container) return;
+
+  const roles = getAllRoles();
+  const totalPerms = PERMISSION_DEFINITIONS.length;
+
+  container.innerHTML = roles.map(role => {
+    const isSuperAdmin = role.id === 'super_admin';
+    const permCount = isSuperAdmin ? totalPerms : Object.values(role.permissions || {}).filter(Boolean).length;
+
+    return `
+      <div class="rbac-role-card-item">
+        <div class="rbac-role-meta-left">
+          <div class="rbac-role-badges-wrap">
+            <span class="role-pill-badge ${escapeHtml(role.badgeClass || 'maker')}">${escapeHtml(role.name)}</span>
+            <span class="system-tag-badge">SYSTEM</span>
+          </div>
+          <p class="rbac-role-description">${escapeHtml(role.description || '')}</p>
+          <span class="rbac-role-perm-count">${isSuperAdmin ? 'Full unrestricted access (All 11 permissions)' : `${permCount} of ${totalPerms} permissions enabled`}</span>
+        </div>
+        <div>
+          ${isSuperAdmin 
+            ? '<span style="font-size: 12px; font-weight: 600; color: #a8a29e; padding: 6px 12px;">Locked (Full Access)</span>' 
+            : `<button type="button" class="btn-edit-role-perms" data-role-id="${escapeHtml(role.id)}">Edit Permissions</button>`
+          }
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Attach Edit Permissions click handlers
+  container.querySelectorAll('.btn-edit-role-perms').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const roleId = btn.dataset.roleId;
+      openRolePermissionsModal(roleId);
+    });
+  });
+}
+
+/**
+ * Open Role Permissions Modal and render CRM categorized checklist
+ */
+function openRolePermissionsModal(roleId) {
+  const role = getRoleById(roleId);
+  if (!role) return;
+
+  editingRoleId = roleId;
+
+  const modal = document.getElementById('rolePermissionsModal');
+  const titleEl = document.getElementById('rolePermModalTitle');
+  const subtitleEl = document.getElementById('rolePermModalSubtitle');
+  const bodyEl = document.getElementById('rolePermModalBody');
+  const saveBtn = document.getElementById('saveRolePermsBtn');
+
+  if (titleEl) titleEl.textContent = role.name.toUpperCase();
+  if (subtitleEl) {
+    subtitleEl.textContent = role.id === 'super_admin' 
+      ? 'Super Admin permissions are locked to full system access.'
+      : `Toggle what ${role.name} can do. Changes apply on each user's next login.`;
+  }
+
+  if (saveBtn) {
+    saveBtn.style.display = role.id === 'super_admin' ? 'none' : 'inline-flex';
+  }
+
+  if (bodyEl) {
+    const rolePerms = role.permissions || {};
+    const isSuperAdmin = role.id === 'super_admin';
+
+    bodyEl.innerHTML = PERMISSION_CATEGORIES.map(category => {
+      const defs = PERMISSION_DEFINITIONS.filter(p => p.category === category);
+      if (defs.length === 0) return '';
+
+      const items = defs.map(def => {
+        const isChecked = isSuperAdmin || rolePerms[def.id] === true;
+        const isDisabled = isSuperAdmin;
+
+        return `
+          <label class="role-perm-checkbox-item ${isDisabled ? 'disabled' : ''}">
+            <input type="checkbox" data-perm-id="${escapeHtml(def.id)}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
+            <div>
+              <strong>${escapeHtml(def.label)}</strong>
+              <span style="display: block; font-size: 11.5px; color: #78716c; margin-top: 2px;">${escapeHtml(def.description)}</span>
+            </div>
+          </label>
+        `;
+      }).join('');
+
+      return `
+        <div class="role-perm-category-group">
+          <div class="role-perm-category-title">${escapeHtml(category)}</div>
+          <div class="role-perm-checkboxes-grid">
+            ${items}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  if (modal) modal.style.display = 'flex';
 }
 
 function showAlert(alertBox, message, type = 'error') {
@@ -550,3 +726,6 @@ function showAlert(alertBox, message, type = 'error') {
     alertBox.style.color = '#047857';
   }
 }
+
+// Backward-compatible alias for navigation router
+export { renderRbacView as renderPermissionsTab };

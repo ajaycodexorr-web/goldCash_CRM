@@ -2,17 +2,18 @@
  * Firebase Connection & Real-Time Firestore Synchronization Service
  */
 
-import { initializeFirebase, subscribeToLeads, subscribeToActivityLogs, subscribeToUsers, fetchFirstUserMessage } from '../../firebase-config.js';
+import { initializeFirebase, subscribeToLeads, subscribeToActivityLogs, subscribeToUsers, subscribeToRoles, fetchFirstUserMessage } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { DEMO_LEADS } from '../constants/demo-data.js';
 import { playNotificationPing, showNewLeadNotificationBanner, showNewMessageNotificationBanner, triggerDesktopNotification, showToast } from '../utils/notifications.js';
 import { addLeadNotification, initLeadNotifications } from '../components/notifications-dropdown.js';
-import { saveLogsToLocalStorage, updateLogsBadge } from './logging-service.js';
+import { addAuditLog, saveLogsToLocalStorage, updateLogsBadge } from './logging-service.js';
 import { normalizePhone } from '../utils/formatters.js';
 
-import { syncAllUsersToFirestore, saveTeamMembers } from './user-service.js';
+import { syncAllUsersToFirestore, saveTeamMembers, syncRolesFromFirestore } from './user-service.js';
 import { logoutUser } from './auth-service.js';
+import { updateComposerDisabledState } from '../components/composer.js';
 
 let connectionTimeoutTimer = null;
 
@@ -33,7 +34,7 @@ export function updateConnectionStatus(status) {
   }
 }
 
-export function connectFirebase(renderLeadsView, renderConversationsView, renderLogsView, updateActiveChatHeader, switchView, highlightLeadCard) {
+export function connectFirebase(renderLeadsView, renderConversationsView, renderLogsView, updateActiveChatHeader, switchView, highlightLeadCard, openLeadChat) {
   updateConnectionStatus('connecting');
 
   if (connectionTimeoutTimer) {
@@ -72,7 +73,7 @@ export function connectFirebase(renderLeadsView, renderConversationsView, render
       return;
     }
 
-    startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsView, updateActiveChatHeader, switchView, highlightLeadCard);
+    startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsView, updateActiveChatHeader, switchView, highlightLeadCard, openLeadChat);
   } catch (err) {
     if (connectionTimeoutTimer) {
       clearTimeout(connectionTimeoutTimer);
@@ -83,7 +84,7 @@ export function connectFirebase(renderLeadsView, renderConversationsView, render
   }
 }
 
-function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsView, updateActiveChatHeader, switchView, highlightLeadCard) {
+function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsView, updateActiveChatHeader, switchView, highlightLeadCard, openLeadChat) {
   // 1. Subscribe to Team Users collection
   if (state.unsubscribeUsers) {
     state.unsubscribeUsers();
@@ -98,25 +99,47 @@ function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsV
       if (state.currentUser && !['super_admin', 'admin'].includes(state.currentUser.role)) {
         const stillExists = users.some(u => u.id === state.currentUser.id);
         if (!stillExists) {
-          logoutUser(() => {
-            showToast("Your account has been deleted by an administrator.", "error");
-          });
+          showToast("Your account has been deleted by an administrator.", "error");
+          setTimeout(() => {
+            window.location.reload();
+          }, 1200);
+          return;
         }
       }
+
+      if (renderLeadsView) renderLeadsView();
+      if (renderConversationsView) renderConversationsView();
     }
   });
 
-  // 2. Subscribe to Activity Logs
+  // 1.5. Subscribe to Roles collection (Real-time RBAC Permission enforcement)
+  if (state.unsubscribeRoles) {
+    state.unsubscribeRoles();
+  }
+  state.unsubscribeRoles = subscribeToRoles((roles) => {
+    if (roles && roles.length > 0) {
+      syncRolesFromFirestore();
+      updateComposerDisabledState();
+      if (renderLeadsView) renderLeadsView();
+      if (renderConversationsView) renderConversationsView();
+    }
+  });
+
+  // 2. Subscribe to System Audit Logs collection
   if (state.unsubscribeLogs) {
     state.unsubscribeLogs();
   }
-  state.unsubscribeLogs = subscribeToActivityLogs((firestoreLogs) => {
-    if (firestoreLogs && firestoreLogs.length > 0) {
-      const mergedMap = new Map();
-      (state.logs || []).forEach(l => mergedMap.set(l.id, l));
-      firestoreLogs.forEach(l => mergedMap.set(l.id, l));
+  state.unsubscribeLogs = subscribeToActivityLogs((remoteLogs) => {
+    if (remoteLogs && Array.isArray(remoteLogs)) {
+      const localLogs = state.logs || [];
+      const logMap = new Map();
 
-      const mergedList = Array.from(mergedMap.values()).sort((a, b) => {
+      remoteLogs.forEach(l => logMap.set(l.id, l));
+      localLogs.forEach(l => {
+        if (!logMap.has(l.id)) logMap.set(l.id, l);
+      });
+
+      const mergedList = Array.from(logMap.values()).sort((a, b) => {
         return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
       });
 
@@ -167,9 +190,37 @@ function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsV
 
         // 1. "New Lead Received" popup banner, sound & Desktop notification ONLY for genuinely new incoming customer leads
         if (!isInitial && isNewDoc && isCustomerLead && !isOutgoing) {
-          console.log(`🔔 [Notification] New incoming lead received from ${lead.name || lead.phone} (${lead.id})`);
+          const isMetaAd = Boolean(lead.referral || (lead.source && (lead.source.toLowerCase().includes('meta') || lead.source.toLowerCase().includes('ad'))));
+          const srcName = isMetaAd ? 'Meta Ads' : (lead.source || lead.platform || 'Direct WhatsApp');
+          const refDetails = lead.referral ? ` [Meta Ad: ${lead.referral.headline || lead.referral.source_id || 'CTWA'}]` : '';
+          const firstQuery = lead.firstMessage || lead.query || lead.lastMessage || 'New inquiry';
+
+          console.log(
+            `%c📥 [NEW INBOUND LEAD] %c${lead.name || lead.phone} via ${srcName}`,
+            'background: #1d4ed8; color: #ffffff; font-weight: bold; padding: 3px 8px; border-radius: 4px; font-size: 12px;',
+            'color: #1d4ed8; font-weight: bold; font-size: 12px;',
+            {
+              id: lead.id,
+              name: lead.name,
+              phone: lead.phone,
+              source: srcName,
+              referralData: lead.referral || 'None (Direct WhatsApp / Organic)',
+              adHeadline: lead.referral ? (lead.referral.headline || lead.referral.title || 'N/A') : 'N/A',
+              adId: lead.referral ? (lead.referral.source_id || 'N/A') : 'N/A',
+              userQuery: firstQuery,
+              rawPayload: lead
+            }
+          );
+
           playNotificationPing('lead');
           addLeadNotification(lead, 'lead');
+          addAuditLog(
+            'incoming_lead',
+            lead.id,
+            lead.name || lead.phone,
+            `Inbound lead received via ${srcName}${refDetails}. Query: "${firstQuery}"`,
+            lead.referral ? 'Meta Ads Webhook' : 'WhatsApp Cloud API'
+          );
           showNewLeadNotificationBanner(lead, (targetLead) => {
             if (switchView) switchView('leads');
             if (highlightLeadCard) highlightLeadCard(targetLead.id);
@@ -179,24 +230,52 @@ function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsV
             if (highlightLeadCard) highlightLeadCard(targetLead.id);
           }, 'lead');
         } else if (!isInitial && !isNewDoc && hasNewMessage && !isOutgoing && isCustomerLead) {
-          // 2. For incoming customer replies on existing conversations: show New Message notification banner, sound & update dropdown
-          console.log(`💬 [Notification] New incoming message from ${lead.name || lead.phone} (${lead.id})`);
-          playNotificationPing('message');
-          addLeadNotification(lead, 'message');
-          showNewMessageNotificationBanner(lead, (targetLead) => {
-            if (switchView) switchView('conversations');
-            if (window.selectLead) {
-              window.selectLead(targetLead.id);
-            } else if (highlightLeadCard) {
-              highlightLeadCard(targetLead.id);
+          // 2. Incoming customer replies on existing conversations:
+          console.log(
+            `%c💬 [INCOMING MESSAGE] %c${lead.name || lead.phone}: "${lead.lastMessage || ''}"`,
+            'background: #047857; color: #ffffff; font-weight: bold; padding: 3px 8px; border-radius: 4px; font-size: 12px;',
+            'color: #047857; font-weight: bold;',
+            {
+              leadId: lead.id,
+              name: lead.name,
+              phone: lead.phone,
+              messageText: lead.lastMessage,
+              timestamp: lead.lastMessageAt || new Date().toISOString(),
+              rawLead: lead
             }
-          });
-          triggerDesktopNotification(lead, (targetLead) => {
-            if (switchView) switchView('conversations');
-            if (window.selectLead) {
-              window.selectLead(targetLead.id);
-            }
-          }, 'message');
+          );
+
+          addAuditLog(
+            'incoming_message',
+            lead.id,
+            lead.name || lead.phone,
+            `Customer message: "${lead.lastMessage || 'Incoming message'}"`,
+            lead.name || lead.phone || 'Customer'
+          );
+
+          // Check if this particular user chat is currently open and active
+          const isCurrentChatActive = state.activeView === 'conversations' && state.activeLeadId === lead.id;
+
+          if (!isCurrentChatActive) {
+            playNotificationPing('message');
+            addLeadNotification(lead, 'message');
+            showNewMessageNotificationBanner(lead, (targetLead) => {
+              if (openLeadChat) {
+                openLeadChat(targetLead.id);
+              } else if (switchView) {
+                switchView('conversations');
+                if (window.selectLead) window.selectLead(targetLead.id);
+              }
+            });
+            triggerDesktopNotification(lead, (targetLead) => {
+              if (openLeadChat) {
+                openLeadChat(targetLead.id);
+              } else if (switchView) {
+                switchView('conversations');
+                if (window.selectLead) window.selectLead(targetLead.id);
+              }
+            }, 'message');
+          }
         }
 
         state.knownLeadIds.add(lead.id);

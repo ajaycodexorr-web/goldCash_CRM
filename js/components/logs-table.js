@@ -178,6 +178,11 @@ export function renderLogActionPill(log, cat) {
   const type = (log.actionType || cat || '').toLowerCase();
 
   switch (type) {
+    case 'incoming_lead':
+    case 'new_lead':
+      return `<span class="log-action-pill new" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;"><i class="fa-solid fa-cloud-arrow-down"></i> Inbound Lead</span>`;
+    case 'incoming_message':
+      return `<span class="log-action-pill message_sent" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0;"><i class="fa-solid fa-inbox"></i> Inbound Message</span>`;
     case 'message_sent':
       return `<span class="log-action-pill message_sent"><i class="fa-solid fa-paper-plane"></i> Message Sent</span>`;
     case 'assignee_change':

@@ -23,6 +23,8 @@ import { initAuthCheck, checkUserDisabledAndEnforceLogout } from './services/aut
 import { setupLoginView } from './components/login-view.js';
 import { global_settings_CRM } from './constants/global-settings.js';
 import { setupNotificationDropdown } from './components/notifications-dropdown.js';
+import { normalizePhone } from './utils/formatters.js';
+import { setupDateRangePicker } from './components/date-range-picker.js';
 
 // Application Initialization Bootstrapper
 document.addEventListener('DOMContentLoaded', () => {
@@ -55,7 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
       renderLogsView,
       updateActiveChatHeader,
       handleSwitchView,
-      highlightLeadCard
+      highlightLeadCard,
+      handleOpenLeadChat
     );
   };
 
@@ -114,18 +117,31 @@ document.addEventListener('DOMContentLoaded', () => {
   setupLightboxHandlers();
   setupLogsHandlers();
   setupExportHandlers();
-  setupNotificationDropdown((leadId, type) => {
+  setupDateRangePicker(handleRenderLeads);
+  setupNotificationDropdown((leadId, type, notif) => {
+    // Find matching lead in state.leads (by ID or normalized phone)
+    let targetLead = state.leads.find(l => l.id === leadId);
+    if (!targetLead && notif && notif.phone) {
+      const normNotifPhone = normalizePhone(notif.phone);
+      targetLead = state.leads.find(l => normalizePhone(l.phone) === normNotifPhone);
+    }
+    const resolvedLeadId = targetLead ? targetLead.id : leadId;
+
     if (type === 'message') {
-      handleOpenLeadChat(leadId);
+      handleOpenLeadChat(resolvedLeadId);
     } else {
+      // For lead notifications: switch to leads view, reset filter so lead is visible, and highlight
+      state.leadsFilter = 'all';
+      state.leadsCurrentPage = 1;
       handleSwitchView('leads');
-      highlightLeadCard(leadId);
+      handleRenderLeads();
+      highlightLeadCard(resolvedLeadId);
     }
   });
-  setupConfigModalHandlers(handleRenderLeads, handleSwitchView);
+  setupConfigModalHandlers(handleRenderLeads, handleSwitchView, handleOpenLeadChat);
 });
 
-function setupConfigModalHandlers(handleRenderLeads, handleSwitchView) {
+function setupConfigModalHandlers(handleRenderLeads, handleSwitchView, handleOpenLeadChat) {
   if (elements.popupRetryBtn) {
     elements.popupRetryBtn.addEventListener('click', () => {
       showToast('Attempting to reconnect to Database...', 'info');
@@ -135,7 +151,8 @@ function setupConfigModalHandlers(handleRenderLeads, handleSwitchView) {
         renderLogsView,
         updateActiveChatHeader,
         handleSwitchView,
-        highlightLeadCard
+        highlightLeadCard,
+        handleOpenLeadChat
       );
     });
   }
@@ -183,7 +200,8 @@ function setupConfigModalHandlers(handleRenderLeads, handleSwitchView) {
         renderLogsView,
         updateActiveChatHeader,
         handleSwitchView,
-        highlightLeadCard
+        highlightLeadCard,
+        handleOpenLeadChat
       );
     });
   }

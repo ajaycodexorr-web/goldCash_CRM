@@ -4,9 +4,10 @@
 
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
-import { loadTeamMembers, saveTeamMembers, syncUsersFromFirestore } from './user-service.js';
+import { loadTeamMembers, saveTeamMembers, syncUsersFromFirestore, syncRolesFromFirestore } from './user-service.js';
 import { showToast } from '../utils/notifications.js';
 import { addAuditLog } from './logging-service.js';
+import { initializeFirebase } from '../../firebase-config.js';
 
 const SESSION_KEY = 'crm_auth_session_v1';
 
@@ -47,8 +48,13 @@ export function clearAuthSession() {
 }
 
 export async function loginUser(email, password) {
+  try {
+    initializeFirebase();
+  } catch (e) {}
+
   loadTeamMembers();
   try {
+    await syncRolesFromFirestore();
     await syncUsersFromFirestore();
   } catch (err) {}
 
@@ -66,7 +72,9 @@ export async function loginUser(email, password) {
   }
 
   const storedPass = (user.password || '').trim();
-  if (storedPass && storedPass !== cleanPass && storedPass.toLowerCase() !== cleanPass.toLowerCase()) {
+  const isPassValid = !storedPass || storedPass === cleanPass || storedPass.toLowerCase() === cleanPass.toLowerCase();
+
+  if (!isPassValid) {
     throw new Error('Invalid Email or Password');
   }
 
@@ -77,6 +85,7 @@ export async function loginUser(email, password) {
   // Authentication Success
   state.currentUser = user;
   saveAuthSession(user);
+  document.documentElement.className = 'is-authenticated';
   addAuditLog('user_login', '', user.name, `User ${user.name} logged into CRM as ${(user.role || 'user').toUpperCase()}`);
 
   return user;
@@ -89,13 +98,7 @@ export function logoutUser(onLoggedOut) {
 
   clearAuthSession();
   state.currentUser = null;
-
-  // Show Auth Overlay & Hide Main CRM App
-  const authOverlay = document.getElementById('authOverlay');
-  const mainApp = document.querySelector('.app-container');
-
-  if (authOverlay) authOverlay.style.display = 'flex';
-  if (mainApp) mainApp.style.display = 'none';
+  document.documentElement.className = 'is-unauthenticated';
 
   showToast('Logged out successfully', 'info');
 
@@ -103,18 +106,18 @@ export function logoutUser(onLoggedOut) {
 }
 
 export function initAuthCheck(onAuthenticated) {
+  try {
+    initializeFirebase();
+  } catch (e) {}
+
   loadTeamMembers();
   const session = getAuthSession();
 
-  const authOverlay = document.getElementById('authOverlay');
-  const mainApp = document.querySelector('.app-container');
-
   if (session && session.userId) {
-    const user = state.teamMembers.find(u => u.id === session.userId);
+    const user = state.teamMembers.find(u => u.id === session.userId || (u.email && session.email && u.email.toLowerCase() === session.email.toLowerCase()));
     if (user && user.status !== 'disabled') {
       state.currentUser = user;
-      if (authOverlay) authOverlay.style.display = 'none';
-      if (mainApp) mainApp.style.display = 'flex';
+      document.documentElement.className = 'is-authenticated';
       if (onAuthenticated) onAuthenticated(user);
       return true;
     }
@@ -122,8 +125,7 @@ export function initAuthCheck(onAuthenticated) {
 
   // Not authenticated or disabled -> Show Login Screen
   clearAuthSession();
-  if (authOverlay) authOverlay.style.display = 'flex';
-  if (mainApp) mainApp.style.display = 'none';
+  document.documentElement.className = 'is-unauthenticated';
   return false;
 }
 

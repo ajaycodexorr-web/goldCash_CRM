@@ -1,49 +1,98 @@
-/**
- * Sub-Users & Team Management Service
- */
-
 import { state } from '../state/app-state.js';
-import { saveUserToFirestore, updateUserStatusInFirestore, deleteUserFromFirestore, fetchUsersFromFirestore } from '../../firebase-config.js';
+import { saveUserToFirestore, updateUserStatusInFirestore, deleteUserFromFirestore, fetchUsersFromFirestore, fetchRolesFromFirestore, saveRoleToFirestore } from '../../firebase-config.js';
 
-export const DEFAULT_PERMISSIONS = {
-  super_admin: {
-    canAddLead: true,
-    canDeleteLead: true,
-    canSendMessage: true,
-    canAddNote: true,
-    canExportExcel: true,
-    canAssignLead: true,
-    canViewLogs: true,
-    canViewTeams: true,
-    canChangePassword: true,
-    canManagePermissions: true
+// ==========================================================================
+// Standard CRM Permissions Catalog
+// ==========================================================================
+export const PERMISSION_DEFINITIONS = [
+  // LEADS & PIPELINE
+  { id: 'canAddLead', label: 'Can Add New Lead', category: 'LEADS & PIPELINE', description: 'Create and add new leads to CRM dashboard' },
+  { id: 'canDeleteLead', label: 'Can Delete Lead', category: 'LEADS & PIPELINE', description: 'Delete existing leads and conversations' },
+  { id: 'canExportExcel', label: 'Can Export to Excel', category: 'LEADS & PIPELINE', description: 'Download lead data and history as Excel spreadsheets' },
+  { id: 'canAssignLead', label: 'Can Reassign Lead', category: 'LEADS & PIPELINE', description: 'Change assigned team member for any lead' },
+  { id: 'canChangeStatus', label: 'Can Change Status', category: 'LEADS & PIPELINE', description: 'Update lead pipeline status (New, Contacted, Converted, etc.)' },
+  { id: 'canAddNote', label: 'Can Add / Edit Notes', category: 'LEADS & PIPELINE', description: 'Add and update internal notes on leads' },
+
+  // WHATSAPP & CHAT
+  { id: 'canSendMessage', label: 'Can Send WhatsApp Messages', category: 'WHATSAPP & CHAT', description: 'Compose and send live replies in chat conversation pane' },
+
+  // SYSTEM & ADMINISTRATION
+  { id: 'canViewLogs', label: 'Can View Audit Logs', category: 'SYSTEM & ADMINISTRATION', description: 'Access the System Audit & Activity Logs page' },
+  { id: 'canViewTeams', label: 'Can View Team Management', category: 'SYSTEM & ADMINISTRATION', description: 'Access the Team & Sub-Users management section' },
+  { id: 'canChangePassword', label: 'Can Change Password', category: 'SYSTEM & ADMINISTRATION', description: 'Allow user to update their own password in Settings' },
+  { id: 'canManagePermissions', label: 'Can Manage Permissions', category: 'SYSTEM & ADMINISTRATION', description: 'Allow Sub Admin to configure permissions for Makers' }
+];
+
+export const PERMISSION_CATEGORIES = [
+  'LEADS & PIPELINE',
+  'WHATSAPP & CHAT',
+  'SYSTEM & ADMINISTRATION'
+];
+
+// ==========================================================================
+// 3 Core CRM System Roles (RBAC)
+// ==========================================================================
+export const DEFAULT_ROLES = [
+  {
+    id: 'super_admin',
+    name: 'Super Admin',
+    badgeClass: 'super_admin',
+    color: '#df8516',
+    description: 'Full unrestricted access to all CRM modules, settings, and team control.',
+    isSystem: true,
+    permissions: Object.fromEntries(PERMISSION_DEFINITIONS.map(p => [p.id, true]))
   },
-  sub_admin: {
-    canAddLead: true,
-    canDeleteLead: true,
-    canSendMessage: true,
-    canAddNote: true,
-    canExportExcel: true,
-    canAssignLead: true,
-    canViewLogs: true,
-    canViewTeams: true,
-    canChangePassword: true,
-    canManagePermissions: true
+  {
+    id: 'sub_admin',
+    name: 'Sub Admin',
+    badgeClass: 'sub_admin',
+    color: '#2563eb',
+    description: 'Administrative operational access with lead management, messaging, and team control.',
+    isSystem: true,
+    permissions: {
+      canAddLead: true,
+      canDeleteLead: true,
+      canSendMessage: true,
+      canAddNote: true,
+      canExportExcel: true,
+      canAssignLead: true,
+      canChangeStatus: true,
+      canViewLogs: true,
+      canViewTeams: true,
+      canChangePassword: true,
+      canManagePermissions: true
+    }
   },
-  maker: {
-    canAddLead: true,
-    canDeleteLead: false,
-    canSendMessage: true,
-    canAddNote: true,
-    canExportExcel: false,
-    canAssignLead: false,
-    canViewLogs: false,
-    canViewTeams: false,
-    canChangePassword: true,
-    canManagePermissions: false
+  {
+    id: 'maker',
+    name: 'Maker',
+    badgeClass: 'maker',
+    color: '#0284c7',
+    description: 'Handles lead capture, customer conversations, and follow-ups.',
+    isSystem: true,
+    permissions: {
+      canAddLead: true,
+      canDeleteLead: false,
+      canSendMessage: true,
+      canAddNote: true,
+      canExportExcel: false,
+      canAssignLead: false,
+      canChangeStatus: true,
+      canViewLogs: false,
+      canViewTeams: false,
+      canChangePassword: true,
+      canManagePermissions: false
+    }
   }
-};
+];
 
+export const DEFAULT_PERMISSIONS = Object.fromEntries(
+  DEFAULT_ROLES.map(r => [r.id, r.permissions])
+);
+
+// ==========================================================================
+// Default Users Catalog (3 Core Users)
+// ==========================================================================
 export const DEFAULT_TEAM_MEMBERS = [
   {
     id: "usr_admin",
@@ -52,68 +101,117 @@ export const DEFAULT_TEAM_MEMBERS = [
     password: "admin123",
     role: "super_admin",
     status: "active",
-    permissions: { ...DEFAULT_PERMISSIONS.super_admin },
     createdAt: new Date().toISOString()
   },
   {
     id: "usr_subadmin_demo",
-    name: "Sub Admin Demo",
+    name: "Sub Admin",
     email: "subadmin@goldcash.com",
     password: "123",
     role: "sub_admin",
     status: "active",
-    permissions: { ...DEFAULT_PERMISSIONS.sub_admin },
     createdAt: new Date().toISOString()
   },
   {
     id: "usr_maker_demo",
-    name: "Maker Demo",
+    name: "Maker Agent",
     email: "maker@goldcash.com",
     password: "123",
     role: "maker",
     status: "active",
-    permissions: { ...DEFAULT_PERMISSIONS.maker },
     createdAt: new Date().toISOString()
   }
 ];
 
-/**
- * Get effective permissions for a user (falls back to role defaults)
- */
-export function getUserPermissions(user) {
-  if (!user) return { ...DEFAULT_PERMISSIONS.maker };
-  const role = user.role || 'maker';
-  const roleDefaults = DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.maker;
-  return {
-    ...roleDefaults,
-    ...(user.permissions || {})
-  };
-}
+// ==========================================================================
+// Roles Storage & Helpers
+// ==========================================================================
+let cachedRoles = null;
 
-/**
- * Check if the active user (or specified user) has a given permission
- * Super Admin ALWAYS has all permissions (full access).
- */
-export function hasPermission(permissionKey, user = state.currentUser) {
-  if (!user) return false;
-  if (user.role === 'super_admin' || user.role === 'admin') {
-    return true; // Super Admin has unrestricted full control
+export function loadRoles() {
+  try {
+    const saved = localStorage.getItem('crm_roles_v3');
+    if (saved) {
+      cachedRoles = JSON.parse(saved);
+      DEFAULT_ROLES.forEach(def => {
+        if (!cachedRoles.some(r => r.id === def.id)) {
+          cachedRoles.push({ ...def });
+        }
+      });
+    } else {
+      cachedRoles = JSON.parse(JSON.stringify(DEFAULT_ROLES));
+      saveRoles();
+    }
+  } catch (e) {
+    cachedRoles = JSON.parse(JSON.stringify(DEFAULT_ROLES));
   }
-  const perms = getUserPermissions(user);
-  return perms[permissionKey] === true;
+  return cachedRoles;
+}
+
+export function saveRoles() {
+  try {
+    if (cachedRoles) {
+      localStorage.setItem('crm_roles_v3', JSON.stringify(cachedRoles));
+    }
+  } catch (e) {}
+}
+
+export function getAllRoles() {
+  if (!cachedRoles) {
+    loadRoles();
+  }
+  return cachedRoles || DEFAULT_ROLES;
+}
+
+export function getRoleById(roleId) {
+  const roles = getAllRoles();
+  return roles.find(r => r.id === roleId) || roles.find(r => r.id === 'maker') || DEFAULT_ROLES[2];
 }
 
 /**
- * Update permissions for a specific user (Super Admin only action)
+ * Update the permissions for a specific role
  */
-export async function updateUserPermissions(userId, newPermissions) {
+export function updateRolePermissions(roleId, newPermissions) {
+  const performerRole = state.currentUser ? state.currentUser.role : 'super_admin';
+  const isSuperAdmin = performerRole === 'super_admin' || performerRole === 'admin';
+
+  if (!isSuperAdmin) {
+    throw new Error('Permission denied: Only Super Admin can modify role definitions.');
+  }
+
+  if (roleId === 'super_admin') {
+    throw new Error('Super Admin role permissions are locked and cannot be modified.');
+  }
+
+  const role = getRoleById(roleId);
+  if (!role) {
+    throw new Error('Role not found.');
+  }
+
+  role.permissions = { ...newPermissions };
+  saveRoles();
+
+  if (!state.demoMode) {
+    try {
+      saveRoleToFirestore(role);
+    } catch (err) {
+      console.warn("Firestore role save warning:", err);
+    }
+  }
+
+  return role;
+}
+
+/**
+ * Assign a Role to a User
+ */
+export async function assignUserRole(userId, newRoleId) {
   const performerRole = state.currentUser ? state.currentUser.role : 'super_admin';
   const isSuperAdmin = performerRole === 'super_admin' || performerRole === 'admin';
   const isSubAdmin = performerRole === 'sub_admin';
-  const canManage = isSuperAdmin || (isSubAdmin && hasPermission('canManagePermissions'));
 
-  if (!canManage) {
-    throw new Error('Permission denied: You do not have permission to modify user permissions.');
+  if (!isSuperAdmin && !isSubAdmin) {
+    throw new Error('Permission denied: You cannot assign user roles.');
   }
 
   const user = state.teamMembers.find(u => u.id === userId);
@@ -121,79 +219,103 @@ export async function updateUserPermissions(userId, newPermissions) {
     throw new Error('User not found.');
   }
 
-  if (user.role === 'super_admin' || user.role === 'admin') {
-    throw new Error('Super Admin permissions cannot be modified.');
+  if (user.id === 'usr_admin' && newRoleId !== 'super_admin') {
+    throw new Error('Primary Super Admin account role cannot be changed.');
   }
 
-  if (isSubAdmin && user.role !== 'maker' && user.role !== 'agent') {
-    throw new Error('Permission denied: Sub Admins can only configure permissions for Makers.');
+  if (newRoleId === 'super_admin' && user.id !== 'usr_admin') {
+    throw new Error('Permission denied: There can only be 1 Super Admin. Additional users can only be Sub Admin or Maker.');
   }
 
-  user.permissions = {
-    ...getUserPermissions(user),
-    ...newPermissions
-  };
+  if (isSubAdmin && (newRoleId === 'super_admin' || newRoleId === 'sub_admin')) {
+    throw new Error('Permission denied: Sub Admins cannot assign administrative roles.');
+  }
 
+  user.role = newRoleId;
   saveTeamMembers();
 
   if (!state.demoMode) {
     try {
       await saveUserToFirestore(user);
-      console.log(`🛡️ [Permissions] Updated permissions for user [${userId}] in Firestore`);
     } catch (err) {
-      console.warn('Firestore user permissions save warning:', err);
+      console.warn('Firestore user role update warning:', err);
     }
   }
 
   return user;
 }
 
-export function loadTeamMembers() {
-  try {
-    const saved = localStorage.getItem('crm_team_members_v1');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Filter out legacy dummy agents if present
-      const cleaned = parsed.filter(u => u.id === 'usr_admin' || !['usr_priya', 'usr_rahul'].includes(u.id));
-      
-      // If only Super Admin exists, include default Sub Admin & Maker for testing
-      const hasSubUsers = cleaned.some(u => u.role !== 'super_admin' && u.role !== 'admin');
-      const baseList = hasSubUsers ? cleaned : [...cleaned, ...DEFAULT_TEAM_MEMBERS.filter(d => d.id !== 'usr_admin')];
+export function getUserPermissions(user = state.currentUser) {
+  if (!user) return {};
+  if (user.role === 'super_admin' || user.role === 'admin') {
+    return Object.fromEntries(PERMISSION_DEFINITIONS.map(p => [p.id, true]));
+  }
+  const roleId = user.role || 'maker';
+  const role = getRoleById(roleId);
+  return role && role.permissions ? { ...role.permissions } : {};
+}
 
-      state.teamMembers = baseList.map(user => {
-        const def = DEFAULT_TEAM_MEMBERS.find(d => d.id === user.id || d.email === user.email);
-        if (def && !user.password) user.password = def.password;
-        // Migrate legacy admin role for admin@goldcash.com to super_admin
-        if (user.email === 'admin@goldcash.com' || user.id === 'usr_admin') {
-          user.role = 'super_admin';
-          if (user.name === 'Admin User') user.name = 'Super Admin';
-        }
-        // Migrate legacy role strings
-        if (user.role === 'admin') user.role = 'super_admin';
-        if (user.role === 'agent') user.role = 'maker';
-        return user;
-      });
-      saveTeamMembers();
+/**
+ * Check if the active user (or specified user) has a given permission
+ */
+export function hasPermission(permissionKey, user = state.currentUser) {
+  if (!user) return false;
+  if (user.role === 'super_admin' || user.role === 'admin') {
+    return true; // Super Admin has full access
+  }
+  const perms = getUserPermissions(user);
+  return perms[permissionKey] === true;
+}
+
+// ==========================================================================
+// Team Members Storage & Sync
+// ==========================================================================
+export function loadTeamMembers() {
+  loadRoles();
+  try {
+    const saved = localStorage.getItem('crm_team_members_v3');
+    if (saved) {
+      state.teamMembers = JSON.parse(saved);
     } else {
-      state.teamMembers = [...DEFAULT_TEAM_MEMBERS];
+      state.teamMembers = JSON.parse(JSON.stringify(DEFAULT_TEAM_MEMBERS));
       saveTeamMembers();
     }
   } catch (e) {
-    state.teamMembers = [...DEFAULT_TEAM_MEMBERS];
+    state.teamMembers = JSON.parse(JSON.stringify(DEFAULT_TEAM_MEMBERS));
   }
 
-  // Ensure default currentUser is set
   const savedCurrentId = localStorage.getItem('crm_current_user_id');
   if (savedCurrentId) {
     const found = state.teamMembers.find(u => u.id === savedCurrentId);
     if (found) state.currentUser = found;
   }
   if (!state.currentUser) {
-    state.currentUser = state.teamMembers[0] || DEFAULT_TEAM_MEMBERS[0];
+    state.currentUser = state.teamMembers.find(u => u.role === 'super_admin') || state.teamMembers[0] || DEFAULT_TEAM_MEMBERS[0];
   }
 
-  // Asynchronously sync users from Firestore if connected
+  syncRolesFromFirestore();
   syncUsersFromFirestore();
+}
+
+export async function syncRolesFromFirestore() {
+  if (state.demoMode) return;
+  try {
+    const fRoles = await fetchRolesFromFirestore();
+    if (fRoles && Array.isArray(fRoles) && fRoles.length > 0) {
+      if (!cachedRoles) cachedRoles = JSON.parse(JSON.stringify(DEFAULT_ROLES));
+      fRoles.forEach(fRole => {
+        const idx = cachedRoles.findIndex(r => r.id === fRole.id);
+        if (idx !== -1) {
+          cachedRoles[idx] = { ...cachedRoles[idx], ...fRole };
+        } else {
+          cachedRoles.push(fRole);
+        }
+      });
+      saveRoles();
+    }
+  } catch (err) {
+    console.warn("Firestore roles sync warning:", err);
+  }
 }
 
 export async function syncUsersFromFirestore() {
@@ -201,13 +323,16 @@ export async function syncUsersFromFirestore() {
   try {
     const fUsers = await fetchUsersFromFirestore();
     if (fUsers && Array.isArray(fUsers) && fUsers.length > 0) {
-      const hasAdmin = fUsers.some(u => u.id === 'usr_admin' || u.email === 'admin@goldcash.com');
-      const baseList = hasAdmin ? fUsers : [...DEFAULT_TEAM_MEMBERS, ...fUsers];
+      const merged = [...fUsers];
+      if (!merged.some(u => u.role === 'super_admin' || u.id === 'usr_admin')) {
+        merged.unshift(DEFAULT_TEAM_MEMBERS[0]);
+      }
 
-      state.teamMembers = baseList.map(fUser => {
+      state.teamMembers = merged.map(fUser => {
         const existing = state.teamMembers.find(m => m.id === fUser.id);
         return {
           ...fUser,
+          role: fUser.role || 'maker',
           password: fUser.password || (existing ? existing.password : '123')
         };
       });
@@ -218,24 +343,7 @@ export async function syncUsersFromFirestore() {
   }
 }
 
-export function saveTeamMembers() {
-  try {
-    localStorage.setItem('crm_team_members_v1', JSON.stringify(state.teamMembers));
-  } catch (e) {}
-}
-
-export function switchActiveUser(userId) {
-  const user = state.teamMembers.find(u => u.id === userId);
-  if (!user) return;
-
-  state.currentUser = user;
-  try {
-    localStorage.setItem('crm_current_user_id', user.id);
-  } catch (e) {}
-}
-
 export async function syncAllUsersToFirestore() {
-  // Only seed default admin if firestore is completely empty
   if (state.demoMode) return;
   try {
     const existing = await fetchUsersFromFirestore();
@@ -249,12 +357,30 @@ export async function syncAllUsersToFirestore() {
   }
 }
 
+export function saveTeamMembers() {
+  try {
+    localStorage.setItem('crm_team_members_v3', JSON.stringify(state.teamMembers));
+  } catch (e) {}
+}
+
+export function switchActiveUser(userId) {
+  const user = state.teamMembers.find(u => u.id === userId);
+  if (!user) return;
+
+  state.currentUser = user;
+  try {
+    localStorage.setItem('crm_current_user_id', user.id);
+  } catch (e) {}
+}
+
 export function addSubUser(name, email, password = '123', role = 'maker') {
   const performerRole = state.currentUser ? state.currentUser.role : 'super_admin';
 
-  // Permission Check: Sub Admin can only create Maker; Super Admin can create Sub Admin or Maker
   let validRole = role;
-  if (performerRole === 'sub_admin' && role !== 'maker') {
+  if (validRole === 'super_admin' || validRole === 'admin') {
+    validRole = 'maker';
+  }
+  if (performerRole === 'sub_admin' && (role === 'super_admin' || role === 'sub_admin')) {
     validRole = 'maker';
   }
 
@@ -265,7 +391,6 @@ export function addSubUser(name, email, password = '123', role = 'maker') {
     password: password.trim() || '123',
     role: validRole,
     status: 'active',
-    permissions: { ...(DEFAULT_PERMISSIONS[validRole] || DEFAULT_PERMISSIONS.maker) },
     createdAt: new Date().toISOString()
   };
 
@@ -286,13 +411,8 @@ export async function deleteSubUser(userId) {
   const deletedUser = state.teamMembers[userIndex];
   const performerRole = state.currentUser ? state.currentUser.role : 'super_admin';
 
-  // Security check: Super Admin cannot be deleted by anyone
   if (deletedUser.role === 'super_admin' || deletedUser.role === 'admin') return null;
-
-  // Sub Admin cannot delete another Sub Admin
   if (performerRole === 'sub_admin' && deletedUser.role === 'sub_admin') return null;
-
-  // Maker cannot delete anyone
   if (performerRole === 'maker') return null;
 
   state.teamMembers.splice(userIndex, 1);
@@ -301,10 +421,7 @@ export async function deleteSubUser(userId) {
   if (!state.demoMode) {
     try {
       await deleteUserFromFirestore(userId);
-      console.log(`✅ [User Service] User ${userId} successfully deleted from Firestore`);
     } catch (err) {
-      console.error('❌ [User Service] Firestore user delete failed:', err);
-      // Rollback local deletion if Firestore database rejected the operation
       state.teamMembers.splice(userIndex, 0, deletedUser);
       saveTeamMembers();
       throw err;
@@ -319,14 +436,8 @@ export function toggleUserStatus(userId) {
   if (!user) return;
 
   const performerRole = state.currentUser ? state.currentUser.role : 'super_admin';
-
-  // Security check: Super Admin status cannot be toggled
   if (user.role === 'super_admin' || user.role === 'admin') return;
-
-  // Sub Admin cannot toggle another Sub Admin
   if (performerRole === 'sub_admin' && user.role === 'sub_admin') return;
-
-  // Maker cannot toggle status
   if (performerRole === 'maker') return;
 
   user.status = user.status === 'active' ? 'disabled' : 'active';
@@ -337,10 +448,6 @@ export function toggleUserStatus(userId) {
   }
 }
 
-/**
- * Change the password of the currently logged-in user (Requires mandatory Old Password verification)
- * Available to ALL roles: Super Admin, Sub Admin, Maker
- */
 export async function changeOwnPassword(oldPassword, newPassword) {
   if (!state.currentUser) {
     throw new Error('No user is currently logged in.');
@@ -370,10 +477,8 @@ export async function changeOwnPassword(oldPassword, newPassword) {
     throw new Error('New Password must be different from your Current Password.');
   }
 
-  // Update in state
   state.currentUser.password = cleanNew;
 
-  // Update in team members array
   const memberIdx = state.teamMembers.findIndex(u => u.id === state.currentUser.id || (u.email && state.currentUser.email && u.email.toLowerCase() === state.currentUser.email.toLowerCase()));
   if (memberIdx !== -1) {
     state.teamMembers[memberIdx].password = cleanNew;
@@ -381,7 +486,6 @@ export async function changeOwnPassword(oldPassword, newPassword) {
 
   saveTeamMembers();
 
-  // Sync to Firestore
   if (!state.demoMode) {
     try {
       await saveUserToFirestore(state.currentUser);
@@ -393,10 +497,6 @@ export async function changeOwnPassword(oldPassword, newPassword) {
   return state.currentUser;
 }
 
-/**
- * Reset a user's password directly (Restricted strictly to Super Admin only)
- * Super Admin can reset password of Sub Admin or Maker without needing their old password.
- */
 export function resetUserPassword(userId, newPassword) {
   const user = state.teamMembers.find(u => u.id === userId);
   if (!user) return null;
@@ -404,9 +504,8 @@ export function resetUserPassword(userId, newPassword) {
   const performerRole = state.currentUser ? state.currentUser.role : 'super_admin';
   const isSuperAdmin = performerRole === 'super_admin' || performerRole === 'admin';
 
-  // Strict Rule: ONLY Super Admin can reset passwords of other team members
   if (!isSuperAdmin) {
-    console.warn('Permission denied: Only Super Admin can reset passwords of sub admin or maker.');
+    console.warn('Permission denied: Only Super Admin can reset passwords.');
     return null;
   }
 

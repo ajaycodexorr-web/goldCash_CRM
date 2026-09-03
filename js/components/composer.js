@@ -18,7 +18,6 @@ export function setupComposerHandlers(renderLeadsView, renderConversationsView, 
   if (elements.attachmentMenuBtn) {
     elements.attachmentMenuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (elements.templatesPopover) elements.templatesPopover.style.display = 'none';
       const isVisible = elements.attachmentPopover && elements.attachmentPopover.style.display === 'block';
       if (elements.attachmentPopover) elements.attachmentPopover.style.display = isVisible ? 'none' : 'block';
     });
@@ -96,40 +95,8 @@ export function setupComposerHandlers(renderLeadsView, renderConversationsView, 
     });
   }
 
-  // Quick Templates Popover
-  if (elements.quickTemplatesBtn) {
-    elements.quickTemplatesBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (elements.attachmentPopover) elements.attachmentPopover.style.display = 'none';
-      const isVisible = elements.templatesPopover && elements.templatesPopover.style.display === 'block';
-      if (elements.templatesPopover) elements.templatesPopover.style.display = isVisible ? 'none' : 'block';
-    });
-  }
-
-  if (elements.closeTemplatesBtn) {
-    elements.closeTemplatesBtn.addEventListener('click', () => {
-      if (elements.templatesPopover) elements.templatesPopover.style.display = 'none';
-    });
-  }
-
-  document.querySelectorAll('.template-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      const templateEl = e.currentTarget;
-      const text = templateEl ? templateEl.dataset.text : '';
-      if (elements.messageTextInput && text) {
-        elements.messageTextInput.value = text;
-        elements.messageTextInput.focus();
-        autoResizeTextarea(elements.messageTextInput);
-      }
-      if (elements.templatesPopover) elements.templatesPopover.style.display = 'none';
-    });
-  });
-
   // Global click popover dismiss
   document.addEventListener('click', (e) => {
-    if (elements.templatesPopover && !elements.templatesPopover.contains(e.target) && e.target !== elements.quickTemplatesBtn) {
-      elements.templatesPopover.style.display = 'none';
-    }
     if (elements.attachmentPopover && !elements.attachmentPopover.contains(e.target) && elements.attachmentMenuBtn && !elements.attachmentMenuBtn.contains(e.target)) {
       elements.attachmentPopover.style.display = 'none';
     }
@@ -309,10 +276,6 @@ export function updateComposerDisabledState() {
     elements.sendMessageBtn.style.cursor = isBlocked ? 'not-allowed' : 'pointer';
   }
 
-  if (elements.quickTemplatesBtn) {
-    elements.quickTemplatesBtn.disabled = isBlocked;
-    elements.quickTemplatesBtn.style.opacity = isBlocked ? '0.5' : '1';
-  }
   if (elements.attachmentMenuBtn) {
     elements.attachmentMenuBtn.disabled = isBlocked;
     elements.attachmentMenuBtn.style.opacity = isBlocked ? '0.5' : '1';
@@ -393,6 +356,7 @@ export async function handleSendMessage(e, renderLeadsView, renderConversationsV
     state.messages.push(optimisticMsg);
 
     if (activeLead) {
+      activeLead.hasWhatsAppMessages = true;
       activeLead.lastMessage = text || (attachments.length > 0 ? `[${attachments[0].type || 'Media'}]` : 'Sent media');
       activeLead.lastMessageAt = now;
       activeLead.lastMessageDirection = 'outgoing';

@@ -9,6 +9,12 @@ export const elements = {
   navItemLogs: document.getElementById('navItemLogs'),
   navItemTeam: document.getElementById('navItemTeam'),
   navItemSettings: document.getElementById('navItemSettings'),
+  navSettingsGroupWrapper: document.getElementById('navSettingsGroupWrapper'),
+  navSettingsSubmenu: document.getElementById('navSettingsSubmenu'),
+  navSubItemPassword: document.getElementById('navSubItemPassword'),
+  navSubItemPermissions: document.getElementById('navSubItemPermissions'),
+  navSettingsCaret: document.getElementById('navSettingsCaret'),
+  navPermBadge: document.getElementById('navPermBadge'),
   navLeadsCount: document.getElementById('navLeadsCount'),
   navConversationsCount: document.getElementById('navConversationsCount'),
   navLogsCount: document.getElementById('navLogsCount'),
@@ -18,7 +24,9 @@ export const elements = {
   conversationsViewSection: document.getElementById('conversationsViewSection'),
   logsViewSection: document.getElementById('logsViewSection'),
   teamViewSection: document.getElementById('teamViewSection'),
-  settingsViewSection: document.getElementById('settingsViewSection'),
+  settingsViewSection: document.getElementById('passwordViewSection'),
+  passwordViewSection: document.getElementById('passwordViewSection'),
+  permissionsViewSection: document.getElementById('permissionsViewSection'),
 
   // Settings & Change Password Elements
   changePasswordForm: document.getElementById('changePasswordForm'),
@@ -73,7 +81,12 @@ export const elements = {
   leadsSearchInput: document.getElementById('leadsSearchInput'),
   leadsCardsList: document.getElementById('leadsCardsList'),
   leadsLoadingState: document.getElementById('leadsLoadingState'),
-  leadsEmptyState: document.getElementById('leadsEmptyState'),
+  leadsFilterAllBtn: document.getElementById('leadsFilterAllBtn'),
+  leadStatusDropdownWrapper: document.getElementById('leadStatusDropdownWrapper'),
+  leadStatusDropdownBtn: document.getElementById('leadStatusDropdownBtn'),
+  leadStatusDropdownMenu: document.getElementById('leadStatusDropdownMenu'),
+  statusDropdownCurrentLabel: document.getElementById('statusDropdownCurrentLabel'),
+  statusDropdownCaret: document.getElementById('statusDropdownCaret'),
   countAllLeads: document.getElementById('countAllLeads'),
   countNewLeads: document.getElementById('countNewLeads'),
   countContactedLeads: document.getElementById('countContactedLeads'),
@@ -89,6 +102,8 @@ export const elements = {
   closeAddLeadModalBtn: document.getElementById('closeAddLeadModalBtn'),
   cancelAddLeadBtn: document.getElementById('cancelAddLeadBtn'),
   createLeadForm: document.getElementById('createLeadForm'),
+  newLeadCountryCode: document.getElementById('newLeadCountryCode'),
+  newLeadPhone: document.getElementById('newLeadPhone'),
 
   // Export Modal Elements
   exportExcelBtn: document.getElementById('exportExcelBtn'),
@@ -166,17 +181,13 @@ export const elements = {
   lightboxDownloadBtn: document.getElementById('lightboxDownloadBtn'),
   lightboxNewTabBtn: document.getElementById('lightboxNewTabBtn'),
 
-  // Templates & Toast
-  quickTemplatesBtn: document.getElementById('quickTemplatesBtn'),
-  templatesPopover: document.getElementById('templatesPopover'),
-  closeTemplatesBtn: document.getElementById('closeTemplatesBtn'),
+  // Toast Notifications
   toastContainer: document.getElementById('toastContainer'),
 
   // 24-Hour WhatsApp Messaging Window
   chatWindowTimerBadge: document.getElementById('chatWindowTimerBadge'),
   chatWindowTimerText: document.getElementById('chatWindowTimerText'),
   windowExpiredBanner: document.getElementById('windowExpiredBanner'),
-  useTemplateWindowBtn: document.getElementById('useTemplateWindowBtn'),
 
   // Delete Confirmation Modal
   deleteConfirmModal: document.getElementById('deleteConfirmModal'),

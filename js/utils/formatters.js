@@ -115,3 +115,21 @@ export function getLatestLeadNote(lead) {
   if (list.length === 0) return null;
   return list[list.length - 1];
 }
+
+export function hasWhatsAppConversation(lead) {
+  if (!lead) return false;
+  // If explicitly flagged as no WhatsApp messages yet, it is strictly excluded from conversations
+  if (lead.hasWhatsAppMessages === false) return false;
+  if (lead.hasWhatsAppMessages === true) return true;
+
+  // If created via CRM and no reply/message recorded
+  if (lead.initiatedBy === 'crm' && !lead.hasAdminReplied) {
+    return false;
+  }
+
+  // Check if lead has valid incoming message text
+  const hasMsgText = (typeof lead.lastMessage === 'string' && lead.lastMessage.trim() !== '' && lead.lastMessage !== 'Lead created manually') ||
+                     (typeof lead.lastMessageText === 'string' && lead.lastMessageText.trim() !== '');
+  return hasMsgText;
+}
+

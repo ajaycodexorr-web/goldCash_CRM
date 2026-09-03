@@ -196,7 +196,8 @@ export function subscribeToLeads(onUpdate, onError) {
         const rawUpdated = parseTs(data.updatedAt);
         const effectiveTime = rawLastMsgAt || rawCreated || rawUpdated || new Date().toISOString();
 
-        const messageText = data.lastMessage || data.firstMessage || data.query || '';
+        const messageText = data.lastMessage || '';
+        const userQuery = data.query || data.firstMessage || '';
 
         leads.push({
           id: docSnap.id,
@@ -204,8 +205,8 @@ export function subscribeToLeads(onUpdate, onError) {
           phone: data.phone || docSnap.id,
           status: data.status || 'new',
           lastMessage: messageText,
-          firstMessage: data.firstMessage || messageText,
-          query: data.query || data.firstMessage || messageText,
+          firstMessage: data.firstMessage || '',
+          query: userQuery,
           lastMessageAt: effectiveTime,
           unreadCount: typeof data.unreadCount === 'number' ? data.unreadCount : (data.hasAdminReplied === false ? 1 : 0),
           createdAt: rawCreated,
@@ -613,9 +614,26 @@ export async function deleteUserFromFirestore(userId) {
   }
 }
 
+export async function ensureFirebaseAuth() {
+  if (!auth) {
+    initializeFirebase();
+  }
+  if (auth && !auth.currentUser) {
+    try {
+      await signInAnonymously(auth);
+    } catch (e) {
+      console.warn("ensureFirebaseAuth warning:", e);
+    }
+  }
+}
+
 export async function fetchUsersFromFirestore() {
+  if (!db) {
+    initializeFirebase();
+  }
   if (!db) return [];
   try {
+    await ensureFirebaseAuth();
     const usersRef = collection(db, 'users');
     const qSnap = await getDocs(usersRef);
     const usersList = [];
@@ -630,6 +648,83 @@ export async function fetchUsersFromFirestore() {
   } catch (err) {
     console.warn("Could not fetch users from Firestore:", err);
     return [];
+  }
+}
+
+export async function fetchRolesFromFirestore() {
+  if (!db) {
+    initializeFirebase();
+  }
+  if (!db) return [];
+  try {
+    await ensureFirebaseAuth();
+    const rolesRef = collection(db, 'roles');
+    const qSnap = await getDocs(rolesRef);
+    const rolesList = [];
+    qSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      rolesList.push({
+        id: docSnap.id,
+        ...data
+      });
+    });
+    return rolesList;
+  } catch (err) {
+    console.warn("Could not fetch roles from Firestore:", err);
+    return [];
+  }
+}
+
+export async function saveRoleToFirestore(role) {
+  if (!db) {
+    initializeFirebase();
+  }
+  if (!db || !role || !role.id) return;
+  try {
+    await ensureFirebaseAuth();
+    const roleRef = doc(db, 'roles', role.id);
+    await setDoc(roleRef, {
+      ...role,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    console.log(`🛡️ [Firestore] Saved role document [${role.id}]`);
+  } catch (err) {
+    console.warn("Role Firestore save failed:", err);
+  }
+}
+
+let rolesUnsubscribe = null;
+export function subscribeToRoles(onUpdate, onError) {
+  if (!db) {
+    if (onError) onError(new Error("Firestore is not initialized"));
+    return () => {};
+  }
+
+  if (rolesUnsubscribe) {
+    rolesUnsubscribe();
+    rolesUnsubscribe = null;
+  }
+
+  try {
+    const rolesRef = collection(db, 'roles');
+    rolesUnsubscribe = onSnapshot(rolesRef, (snapshot) => {
+      const rolesList = [];
+      snapshot.forEach((docSnap) => {
+        rolesList.push({
+          id: docSnap.id,
+          ...docSnap.data()
+        });
+      });
+      if (onUpdate) onUpdate(rolesList);
+    }, (err) => {
+      console.warn("Roles snapshot listener error:", err);
+      if (onError) onError(err);
+    });
+
+    return rolesUnsubscribe;
+  } catch (e) {
+    console.warn("Subscribe to roles exception:", e);
+    return () => {};
   }
 }
 
@@ -879,13 +974,15 @@ export async function createNewLead(leadData) {
     targetLeadId = 'lead_' + Date.now();
   }
 
+  const leadSource = leadData.source || leadData.platform || 'Direct WhatsApp';
+
   const docPayload = {
     id: targetLeadId,
     name: leadData.name || 'New Lead',
     phone: rawPhone,
     status: leadData.status || 'new',
-    platform: 'CRM',
-    source: 'CRM',
+    platform: leadSource,
+    source: leadSource,
     assigneeId: leadData.assigneeId || null,
     assigneeName: leadData.assigneeName || 'Unassigned',
     notes: leadData.notes || [],

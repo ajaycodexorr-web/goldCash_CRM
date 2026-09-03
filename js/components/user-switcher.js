@@ -10,6 +10,7 @@ import { updateComposerDisabledState } from './composer.js';
 import { updateExportBtnDisabledState } from '../utils/export-excel.js';
 import { logoutUser } from '../services/auth-service.js';
 import { hasPermission } from '../services/user-service.js';
+import { updateNavigationVisibility } from './navigation.js';
 
 export function setupUserSwitcher(onUserSwitch) {
   const container = document.getElementById('userProfileCardWrap');
@@ -42,32 +43,8 @@ export function renderUserSwitcher(container, onUserSwitch) {
 
   if (isDisabled) roleLabel = 'DISABLED';
 
-  const canSeeTeams = hasPermission('canViewTeams', current);
-  const canSeeLogs = hasPermission('canViewLogs', current);
-
-  const navTeamBtn = elements.navItemTeam || document.getElementById('navItemTeam');
-  if (navTeamBtn) {
-    navTeamBtn.style.display = (canSeeTeams && !isDisabled) ? 'flex' : 'none';
-    if (!canSeeTeams && elements.teamViewSection) {
-      elements.teamViewSection.style.display = 'none';
-    }
-  }
-
-  const navLogsBtn = elements.navItemLogs || document.getElementById('navItemLogs');
-  if (navLogsBtn) {
-    navLogsBtn.style.display = (canSeeLogs && !isDisabled) ? 'flex' : 'none';
-    if (!canSeeLogs && elements.logsViewSection) {
-      elements.logsViewSection.style.display = 'none';
-    }
-  }
-
-  const navSettingsBtn = elements.navItemSettings || document.getElementById('navItemSettings');
-  if (navSettingsBtn) {
-    navSettingsBtn.style.display = !isDisabled ? 'flex' : 'none';
-    if (isDisabled && elements.settingsViewSection) {
-      elements.settingsViewSection.style.display = 'none';
-    }
-  }
+  // Update navigation visibility according to RBAC permissions
+  updateNavigationVisibility();
 
   // Update composer and export button locking for disabled status
   updateComposerDisabledState();

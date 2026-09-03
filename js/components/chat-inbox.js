@@ -5,10 +5,9 @@
 import { subscribeToMessages, markLeadAsRead, resolveWhatsAppMediaUrl, addLeadNote, updateLeadStatus, updateLeadAssignee } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
-import { DEMO_LEADS } from '../constants/demo-data.js';
-import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, formatTimeOnly, parseDate, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote } from '../utils/formatters.js';
+import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, formatTimeOnly, parseDate, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote, hasWhatsAppConversation } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
-import { clearAllStagedAttachments, autoResizeTextarea } from './composer.js';
+import { clearAllStagedAttachments, autoResizeTextarea, updateComposerDisabledState } from './composer.js';
 import { openLightbox } from './lightbox.js';
 import { handleDeleteLead, openLeadNotesModal, updateActiveChatNotes, renderLeadNotesHistory } from './leads-table.js';
 import { getUserFirstQuery } from '../utils/export-excel.js';
@@ -85,11 +84,6 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
     });
   }
 
-  if (elements.useTemplateWindowBtn) {
-    elements.useTemplateWindowBtn.addEventListener('click', () => {
-      if (elements.quickTemplatesBtn) elements.quickTemplatesBtn.click();
-    });
-  }
 
   // Toggle Contact Details Sidebar
   if (elements.toggleContactDetailsBtn) {
@@ -126,6 +120,10 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
   if (elements.contactDetailsOwnerSelect) {
     elements.contactDetailsOwnerSelect.addEventListener('change', async (e) => {
       if (checkUserDisabledAndEnforceLogout()) return;
+      if (!hasPermission('canAssignLead')) {
+        showToast("Permission denied: You do not have permission to reassign leads.", "error");
+        return;
+      }
       const newAssigneeId = e.target.value;
       const leadId = state.activeLeadId;
       if (!leadId) return;
@@ -160,6 +158,10 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
   if (elements.contactDetailsStatusSelect) {
     elements.contactDetailsStatusSelect.addEventListener('change', async (e) => {
       if (checkUserDisabledAndEnforceLogout()) return;
+      if (!hasPermission('canChangeStatus')) {
+        showToast("Permission denied: You do not have permission to change lead status.", "error");
+        return;
+      }
       const newStatus = e.target.value;
       const leadId = state.activeLeadId;
       if (!leadId) return;
@@ -189,6 +191,10 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
     elements.contactDetailsAddNoteForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (checkUserDisabledAndEnforceLogout()) return;
+      if (!hasPermission('canAddNote')) {
+        showToast("Permission denied: You do not have permission to add notes.", "error");
+        return;
+      }
       const targetLeadId = state.activeLeadId;
       if (!targetLeadId) return;
 
@@ -272,14 +278,17 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
   }
 }
 
+export { hasWhatsAppConversation };
+
 export function renderConversationsView() {
   const { leads, convSearchQuery, convFilter, activeLeadId, currentUser } = state;
   const isAgent = currentUser && (currentUser.role === 'agent' || currentUser.role === 'maker');
 
-  // Deduplicate active leads by ID or normalized phone number
+  // Deduplicate active leads with messages by ID or normalized phone number
   const uniqueMap = new Map();
   leads.forEach(lead => {
     if ((lead.status || '').toLowerCase() === 'deleted') return;
+    if (!hasWhatsAppConversation(lead)) return;
     const normP = normalizePhone(lead.phone);
     const key = normP ? `phone_${normP}` : lead.id;
     if (!uniqueMap.has(key)) {
@@ -290,20 +299,7 @@ export function renderConversationsView() {
     }
   });
 
-  let activeConversations = Array.from(uniqueMap.values()).filter(lead => {
-    // If created by CRM and no WhatsApp messages have arrived or been sent, do NOT show in Team Inbox conversations
-    const isCrmPlatform = (lead.platform || lead.source || '').toUpperCase() === 'CRM';
-    const hasMessages = lead.hasWhatsAppMessages === true ||
-      (lead.messagesCount && lead.messagesCount > 0) ||
-      (lead.lastMessage && lead.lastMessage.trim() && lead.lastMessage !== 'Lead created manually') ||
-      (Array.isArray(lead.messages) && lead.messages.length > 0) ||
-      Boolean(lead.lastInboundAt);
-
-    if (isCrmPlatform && !hasMessages) {
-      return false;
-    }
-    return true;
-  });
+  let activeConversations = Array.from(uniqueMap.values());
 
   // Strict Agent Filter: Agents ONLY see conversations for leads assigned to them ("Show only assign")
   if (isAgent) {
@@ -391,6 +387,11 @@ export function renderConversationsView() {
 }
 
 export function openLeadChat(leadId, switchView, renderLeadsView) {
+  const lead = state.leads.find(l => l.id === leadId);
+  if (!lead || !hasWhatsAppConversation(lead)) {
+    showToast('No WhatsApp conversation received for this lead yet.', 'info');
+    return;
+  }
   if (switchView) switchView('conversations');
   selectLead(leadId, renderLeadsView);
 }
@@ -415,6 +416,7 @@ export function selectLead(leadId, renderLeadsView) {
   if (elements.chatErrorBanner) elements.chatErrorBanner.style.display = 'none';
 
   clearAllStagedAttachments();
+  updateComposerDisabledState();
 
   if (state.windowTimerInterval) {
     clearInterval(state.windowTimerInterval);
@@ -425,6 +427,7 @@ export function selectLead(leadId, renderLeadsView) {
   loadMessagesForLead(leadId, renderLeadsView);
 
   setTimeout(() => {
+    updateComposerDisabledState();
     if (elements.messageTextInput && !elements.messageTextInput.disabled) {
       elements.messageTextInput.focus();
     }
@@ -441,10 +444,15 @@ export function updateActiveChatHeader(lead) {
   
   if (elements.deleteLeadBtn) {
     const isDeleted = (lead.status || '').toLowerCase() === 'deleted';
-    const canDelete = hasPermission('canDeleteLead') && !isDeleted;
-    elements.deleteLeadBtn.style.display = canDelete ? 'inline-flex' : 'none';
+    const canDelete = hasPermission('canDeleteLead') && (!state.currentUser || state.currentUser.status !== 'disabled');
+    elements.deleteLeadBtn.style.display = isDeleted ? 'none' : 'inline-flex';
+    elements.deleteLeadBtn.disabled = !canDelete;
+    elements.deleteLeadBtn.style.cursor = canDelete ? 'pointer' : 'not-allowed';
+    elements.deleteLeadBtn.style.opacity = canDelete ? '1' : '0.45';
+    elements.deleteLeadBtn.title = canDelete ? 'Delete lead' : 'You do not have permission to delete leads';
   }
 
+  updateComposerDisabledState();
   updateActiveChatNotes(lead);
   renderContactDetailsPanel(lead);
 }
@@ -486,19 +494,51 @@ export function renderContactDetailsPanel(lead) {
 
   // Set Status Select dropdown
   if (elements.contactDetailsStatusSelect) {
+    const canChangeStat = hasPermission('canChangeStatus');
+    elements.contactDetailsStatusSelect.disabled = !canChangeStat;
     elements.contactDetailsStatusSelect.value = (lead.status || 'new').toLowerCase();
   }
 
-  // Update Platform Tag Pill
+  // Notes permissions
+  const canNote = hasPermission('canAddNote');
+  if (elements.contactDetailsNoteInput) {
+    elements.contactDetailsNoteInput.disabled = !canNote;
+    elements.contactDetailsNoteInput.placeholder = canNote ? 'Add internal team note...' : 'No permission to add notes.';
+  }
+  if (elements.contactDetailsAddNoteSubmitBtn) {
+    elements.contactDetailsAddNoteSubmitBtn.disabled = !canNote;
+    elements.contactDetailsAddNoteSubmitBtn.style.display = canNote ? 'inline-flex' : 'none';
+  }
+
+  // Update Source Tag Pill
   const platformPill = document.getElementById('contactDetailsPlatformPill');
   if (platformPill) {
-    const isCrm = (lead.platform || lead.source || '').toUpperCase() === 'CRM';
-    if (isCrm) {
-      platformPill.className = 'tag-pill crm';
-      platformPill.innerHTML = '<i class="fa-solid fa-laptop"></i> CRM';
+    if (lead.referral || (lead.source && (lead.source.toLowerCase().includes('meta') || lead.source.toLowerCase().includes('ad')))) {
+      const headline = lead.referral && (lead.referral.headline || lead.referral.title) ? ` (${lead.referral.headline})` : '';
+      platformPill.className = 'tag-pill meta-ads';
+      platformPill.innerHTML = '<i class="fa-brands fa-meta"></i> Meta Ads' + escapeHtml(headline);
     } else {
-      platformPill.className = 'tag-pill whatsapp';
-      platformPill.innerHTML = '<i class="fa-brands fa-whatsapp"></i> WhatsApp';
+      const raw = (lead.source || lead.platform || 'Direct WhatsApp').trim();
+      const lower = raw.toLowerCase();
+      if (lower === 'whatsapp' || lower.includes('direct whatsapp')) {
+        platformPill.className = 'tag-pill whatsapp';
+        platformPill.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Direct WhatsApp';
+      } else if (lower.includes('website')) {
+        platformPill.className = 'tag-pill website';
+        platformPill.innerHTML = '<i class="fa-solid fa-globe"></i> ' + escapeHtml(raw);
+      } else if (lower.includes('message')) {
+        platformPill.className = 'tag-pill message';
+        platformPill.innerHTML = '<i class="fa-solid fa-comment-dots"></i> ' + escapeHtml(raw);
+      } else if (lower.includes('call') || lower.includes('phone')) {
+        platformPill.className = 'tag-pill phone';
+        platformPill.innerHTML = '<i class="fa-solid fa-phone"></i> ' + escapeHtml(raw);
+      } else if (lower === 'crm') {
+        platformPill.className = 'tag-pill crm';
+        platformPill.innerHTML = '<i class="fa-solid fa-laptop"></i> CRM';
+      } else {
+        platformPill.className = 'tag-pill custom-source';
+        platformPill.innerHTML = '<i class="fa-solid fa-tag"></i> ' + escapeHtml(raw);
+      }
     }
   }
 
@@ -594,6 +634,12 @@ export function loadMessagesForLead(leadId, renderLeadsView) {
       if (elements.messagesLoading) elements.messagesLoading.style.display = 'none';
       state.messages = messagesList;
       renderMessagesStream();
+      console.log(
+        `%c📨 [MESSAGES LOADED] %cLead: ${leadId} (${messagesList.length} messages received)`,
+        'background: #7c3aed; color: #ffffff; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
+        'color: #7c3aed; font-weight: bold;',
+        messagesList
+      );
       update24HourWindowTimer();
 
       // Extract & cache the user's first incoming message for User Query column
@@ -640,14 +686,14 @@ export function renderMessagesStream() {
       lastDateString = dateString;
     }
 
-    const isOutgoing = msg.direction === 'outgoing';
+    const isOutgoing = (msg.direction === 'outgoing' || msg.direction === 'outbound' || msg.fromUser === false) && msg.direction !== 'incoming';
     const directionClass = isOutgoing ? 'outgoing' : 'incoming';
     const timeFormatted = formatTimeOnly(msg.createdAt || msg.timestamp);
     const status = (msg.status || (isOutgoing ? 'sent' : 'received')).toLowerCase();
     const isFailed = isOutgoing && status === 'failed';
 
     const normalized = normalizeMessageMedia(msg);
-    const performerName = msg.performedByName || msg.assigneeName || (isOutgoing ? (msg.performedBy || 'Admin User') : 'Customer');
+    const performerName = isOutgoing ? (msg.performedByName || msg.performedBy || msg.senderName || 'Agent') : '';
     const bubbleContent = renderMessageBubbleContent(normalized, msg, msgIndex);
     const isMedia = normalized.type !== 'text';
 
@@ -656,7 +702,7 @@ export function renderMessagesStream() {
         <div class="message-bubble ${isMedia ? 'bubble-media' : ''} ${isFailed ? 'bubble-failed' : ''}">
           ${bubbleContent}
           <div class="message-meta">
-            <span class="msg-assignee-tag" title="Assignee / Performer: ${escapeHtml(performerName)}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(performerName)}</span>
+            ${isOutgoing && performerName ? `<span class="msg-assignee-tag" title="Sent by: ${escapeHtml(performerName)}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(performerName)}</span>` : ''}
             <span class="message-time">${timeFormatted}</span>
             ${getStatusIconHtml(status, isOutgoing)}
           </div>
@@ -934,7 +980,7 @@ export function update24HourWindowTimer() {
     if (messageInput) {
       messageInput.value = '';
       messageInput.disabled = true;
-      messageInput.placeholder = "🔒 24-Hour Window Closed. Click Quick Templates to send a template message.";
+      messageInput.placeholder = "Type a WhatsApp message...";
     }
     if (sendBtn) sendBtn.disabled = true;
     if (attachmentBtn) attachmentBtn.disabled = true;

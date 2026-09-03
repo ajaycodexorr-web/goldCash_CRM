@@ -117,16 +117,17 @@ export function showNewLeadNotificationBanner(lead, onViewClick) {
       <span class="banner-lead-name">${escapeHtml(displayName)}</span>
       <span class="banner-lead-snippet">"${escapeHtml(snippet.substring(0, 55))}"</span>
     </div>
-    <button class="banner-view-btn">View Lead</button>
-    <button class="banner-close-btn">&times;</button>
+    <button class="banner-view-btn" type="button">View Lead</button>
+    <button class="banner-close-btn" type="button" title="Dismiss">&times;</button>
   `;
 
-  banner.querySelector('.banner-view-btn').addEventListener('click', () => {
+  banner.addEventListener('click', (e) => {
+    if (e.target.closest('.banner-close-btn')) {
+      e.stopPropagation();
+      banner.remove();
+      return;
+    }
     if (onViewClick) onViewClick(lead);
-    banner.remove();
-  });
-
-  banner.querySelector('.banner-close-btn').addEventListener('click', () => {
     banner.remove();
   });
 
@@ -156,16 +157,17 @@ export function showNewMessageNotificationBanner(lead, onViewClick) {
       <span class="banner-lead-name">${escapeHtml(displayName)}</span>
       <span class="banner-lead-snippet">"${escapeHtml(snippet.substring(0, 55))}"</span>
     </div>
-    <button class="banner-view-btn msg-btn">View Chat</button>
-    <button class="banner-close-btn">&times;</button>
+    <button class="banner-view-btn msg-btn" type="button">View Chat</button>
+    <button class="banner-close-btn" type="button" title="Dismiss">&times;</button>
   `;
 
-  banner.querySelector('.banner-view-btn').addEventListener('click', () => {
+  banner.addEventListener('click', (e) => {
+    if (e.target.closest('.banner-close-btn')) {
+      e.stopPropagation();
+      banner.remove();
+      return;
+    }
     if (onViewClick) onViewClick(lead);
-    banner.remove();
-  });
-
-  banner.querySelector('.banner-close-btn').addEventListener('click', () => {
     banner.remove();
   });
 

@@ -21,11 +21,43 @@
   <link rel="icon" type="image/svg+xml" href="goldCash-logo.svg">
 
   <link rel="stylesheet" href="styles.css">
+
+  <!-- Instant Synchronous Auth Session Check (Prevents ANY login screen flash on reload) -->
+  <script>
+    (function() {
+      try {
+        var sess = localStorage.getItem('crm_auth_session_v1');
+        if (sess) {
+          var parsed = JSON.parse(sess);
+          if (parsed && parsed.userId) {
+            document.documentElement.className = 'is-authenticated';
+            return;
+          }
+        }
+      } catch (e) {}
+      document.documentElement.className = 'is-unauthenticated';
+    })();
+  </script>
+  <style>
+    /* Zero-Flash Instant View Switching */
+    html.is-authenticated #authOverlay {
+      display: none !important;
+    }
+    html.is-authenticated .crm-app-layout {
+      display: flex !important;
+    }
+    html.is-unauthenticated #authOverlay {
+      display: flex !important;
+    }
+    html.is-unauthenticated .crm-app-layout {
+      display: none !important;
+    }
+  </style>
 </head>
 
 <body>
   <!-- Full Screen Authentication / Login Overlay with Animated Aurora Mesh -->
-  <div class="auth-overlay" id="authOverlay" style="display: flex;">
+  <div class="auth-overlay" id="authOverlay">
     <!-- Animated Dynamic Background Layer -->
     <div class="auth-bg-ambient">
       <div class="auth-orb auth-orb-1"></div>
@@ -117,11 +149,27 @@
           <span class="nav-item-text">Team</span>
         </button>
 
-        <!-- SETTINGS (ALL USERS: Super Admin, Sub Admin, Maker) -->
-        <button class="nav-menu-item" id="navItemSettings" data-view="settings" title="Settings & Security">
-          <div class="nav-item-icon"><i class="fa-solid fa-gear"></i></div>
-          <span class="nav-item-text">Settings</span>
-        </button>
+        <!-- SETTINGS WITH EXPANDABLE SUBMENU -->
+        <div class="nav-group-wrapper" id="navSettingsGroupWrapper">
+          <button class="nav-menu-item nav-has-submenu" id="navItemSettings" data-view="settings" title="Settings & Security">
+            <div class="nav-item-icon"><i class="fa-solid fa-gear"></i></div>
+            <span class="nav-item-text">Settings</span>
+            <i class="fa-solid fa-chevron-down nav-submenu-caret" id="navSettingsCaret"></i>
+          </button>
+
+          <!-- Settings Submenu Options -->
+          <div class="nav-submenu-list" id="navSettingsSubmenu">
+            <button class="nav-submenu-item" id="navSubItemPassword" data-settings-tab="account" title="Change Password">
+              <div class="nav-subitem-icon"><i class="fa-solid fa-key"></i></div>
+              <span class="nav-subitem-text">Change Password</span>
+            </button>
+            <button class="nav-submenu-item" id="navSubItemPermissions" data-settings-tab="permissions" title="User Permissions">
+              <div class="nav-subitem-icon"><i class="fa-solid fa-shield-halved"></i></div>
+              <span class="nav-subitem-text">Permissions</span>
+              <span class="user-role-badge super_admin nav-sub-badge" id="navPermBadge" style="display: none; font-size: 9px; padding: 1px 5px; margin-left: auto;">Admin</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- User Initials Profile / Switcher Footer -->
@@ -197,25 +245,215 @@
           <!-- Filter Pills -->
           <div class="leads-filter-bar">
             <div class="filter-pills">
-              <button class="lead-filter-pill active" data-filter="all">All Leads (<span
-                  id="countAllLeads">0</span>)</button>
-              <button class="lead-filter-pill" data-filter="new">New (<span id="countNewLeads">0</span>)</button>
-              <button class="lead-filter-pill" data-filter="contacted">Contacted (<span
-                  id="countContactedLeads">0</span>)</button>
-              <button class="lead-filter-pill" data-filter="no_answer">No Answer (<span
-                  id="countNoAnswerLeads">0</span>)</button>
-              <button class="lead-filter-pill" data-filter="follow_up">Follow Up (<span
-                  id="countFollowUpLeads">0</span>)</button>
-              <button class="lead-filter-pill" data-filter="converted">Converted (<span
-                  id="countConvertedLeads">0</span>)</button>
-              <button class="lead-filter-pill" data-filter="lost">Lost (<span id="countLostLeads">0</span>)</button>
-              <button class="lead-filter-pill" data-filter="deleted">Deleted (<span
-                  id="countDeletedLeads">0</span>)</button>
+              <button class="lead-filter-pill active" id="leadsFilterAllBtn" data-filter="all">
+                All Leads (<span id="countAllLeads">0</span>)
+              </button>
+
+              <!-- Status Filter Dropdown -->
+              <div class="lead-status-dropdown-wrapper" id="leadStatusDropdownWrapper">
+                <button type="button" class="lead-filter-pill status-dropdown-btn" id="leadStatusDropdownBtn" aria-haspopup="true" aria-expanded="false">
+                  <span class="status-dropdown-btn-content" id="statusDropdownBtnContent">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span id="statusDropdownCurrentLabel">Status</span>
+                  </span>
+                  <i class="fa-solid fa-chevron-down status-dropdown-caret" id="statusDropdownCaret"></i>
+                </button>
+
+                <div class="lead-status-dropdown-menu" id="leadStatusDropdownMenu" style="display: none;">
+                  <div class="status-dropdown-header">Filter by Status</div>
+                  <div class="status-dropdown-list">
+                    <button type="button" class="status-dropdown-item" data-status="new">
+                      <span class="status-indicator-dot dot-new"></span>
+                      <span class="status-item-name">New</span>
+                      <span class="status-item-count" id="countNewLeads">0</span>
+                      <i class="fa-solid fa-check status-check-icon"></i>
+                    </button>
+                    <button type="button" class="status-dropdown-item" data-status="contacted">
+                      <span class="status-indicator-dot dot-contacted"></span>
+                      <span class="status-item-name">Contacted</span>
+                      <span class="status-item-count" id="countContactedLeads">0</span>
+                      <i class="fa-solid fa-check status-check-icon"></i>
+                    </button>
+                    <button type="button" class="status-dropdown-item" data-status="no_answer">
+                      <span class="status-indicator-dot dot-no-answer"></span>
+                      <span class="status-item-name">No Answer</span>
+                      <span class="status-item-count" id="countNoAnswerLeads">0</span>
+                      <i class="fa-solid fa-check status-check-icon"></i>
+                    </button>
+                    <button type="button" class="status-dropdown-item" data-status="follow_up">
+                      <span class="status-indicator-dot dot-follow-up"></span>
+                      <span class="status-item-name">Follow Up</span>
+                      <span class="status-item-count" id="countFollowUpLeads">0</span>
+                      <i class="fa-solid fa-check status-check-icon"></i>
+                    </button>
+                    <button type="button" class="status-dropdown-item" data-status="converted">
+                      <span class="status-indicator-dot dot-converted"></span>
+                      <span class="status-item-name">Converted</span>
+                      <span class="status-item-count" id="countConvertedLeads">0</span>
+                      <i class="fa-solid fa-check status-check-icon"></i>
+                    </button>
+                    <button type="button" class="status-dropdown-item" data-status="lost">
+                      <span class="status-indicator-dot dot-lost"></span>
+                      <span class="status-item-name">Lost</span>
+                      <span class="status-item-count" id="countLostLeads">0</span>
+                      <i class="fa-solid fa-check status-check-icon"></i>
+                    </button>
+                    <div class="status-dropdown-divider"></div>
+                    <button type="button" class="status-dropdown-item item-deleted" data-status="deleted">
+                      <span class="status-indicator-dot dot-deleted"></span>
+                      <span class="status-item-name">Deleted</span>
+                      <span class="status-item-count" id="countDeletedLeads">0</span>
+                      <i class="fa-solid fa-check status-check-icon"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <button id="exportExcelBtn" class="btn-export-excel" title="Export leads to Excel">
-              <i class="fa-solid fa-file-excel"></i> Export to Excel
-            </button>
+            <div class="leads-filter-right-actions">
+              <!-- Date Range Filter Dropdown -->
+              <div class="lead-date-filter-wrapper" id="leadDateFilterWrapper">
+                <button type="button" class="lead-date-picker-btn" id="leadDateFilterBtn" aria-haspopup="true" aria-expanded="false" title="Filter leads by date range">
+                  <i class="fa-regular fa-calendar-days date-picker-icon"></i>
+                  <span class="date-picker-btn-text" id="dateFilterBtnText">All Time</span>
+                  <span class="date-picker-clear-quick" id="dateFilterClearQuickBtn" title="Clear date filter" style="display: none;">&times;</span>
+                  <i class="fa-solid fa-chevron-down date-picker-caret"></i>
+                </button>
+
+                <!-- Date Range Picker Popover Dropdown -->
+                <div class="date-range-picker-popover" id="dateRangePickerPopover" style="display: none;">
+                  <div class="drp-header">
+                    <span class="drp-title"><i class="fa-regular fa-calendar-check" style="color: var(--crm-primary);"></i> Filter by Date Range</span>
+                    <button type="button" class="drp-close-btn" id="drpCloseBtn">&times;</button>
+                  </div>
+
+                  <div class="drp-body">
+                    <!-- Left Presets Sidebar -->
+                    <div class="drp-presets-sidebar">
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="all" checked>
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Maximum (All Time)</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="today">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Today</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="yesterday">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Yesterday</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="last_7_days">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Last 7 days</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="last_14_days">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Last 14 days</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="last_30_days">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Last 30 days</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="this_week">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">This week</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="last_week">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Last week</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="this_month">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">This month</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="last_month">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Last month</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="this_quarter">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">This quarter</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="last_quarter">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Last quarter</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="this_year">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">This year</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="last_year">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Last year</span>
+                      </label>
+                      <label class="drp-preset-option">
+                        <input type="radio" name="drpPreset" value="custom">
+                        <span class="drp-radio-custom"></span>
+                        <span class="drp-preset-label">Custom range</span>
+                      </label>
+                    </div>
+
+                    <!-- Right Dual Month Interactive Calendar -->
+                    <div class="drp-calendars-container">
+                      <div class="drp-calendars-header-nav">
+                        <button type="button" class="drp-nav-btn prev" id="drpPrevMonthBtn" title="Previous month"><i class="fa-solid fa-chevron-left"></i></button>
+                        <div class="drp-month-titles">
+                          <span class="drp-month-title" id="drpMonthTitleLeft">Month 1</span>
+                          <span class="drp-month-title" id="drpMonthTitleRight">Month 2</span>
+                        </div>
+                        <button type="button" class="drp-nav-btn next" id="drpNextMonthBtn" title="Next month"><i class="fa-solid fa-chevron-right"></i></button>
+                      </div>
+
+                      <div class="drp-dual-calendars" id="drpDualCalendarsWrap">
+                        <div class="drp-calendar-month left" id="drpCalendarLeft"></div>
+                        <div class="drp-calendar-month right" id="drpCalendarRight"></div>
+                      </div>
+
+                      <div class="drp-range-inputs-row">
+                        <div class="drp-date-input-wrap">
+                          <label>Start Date</label>
+                          <input type="text" id="drpStartDateInput" readonly placeholder="Start date">
+                        </div>
+                        <span class="drp-input-separator">—</span>
+                        <div class="drp-date-input-wrap">
+                          <label>End Date</label>
+                          <input type="text" id="drpEndDateInput" readonly placeholder="End date">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="drp-footer">
+                    <div class="drp-footer-left">
+                      <button type="button" class="btn-drp-clear" id="drpClearBtn" title="Reset date filter and show all leads"><i class="fa-solid fa-arrow-rotate-left"></i> Clear Filter</button>
+                      <span class="drp-helper-text" id="drpHelperText">Showing all leads (All Time)</span>
+                    </div>
+                    <div class="drp-footer-actions">
+                      <button type="button" class="btn-drp-cancel" id="drpCancelBtn">Cancel</button>
+                      <button type="button" class="btn-drp-apply" id="drpApplyBtn">Update</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button id="exportExcelBtn" class="btn-export-excel" title="Export leads to Excel">
+                <i class="fa-solid fa-file-excel"></i> Export to Excel
+              </button>
+            </div>
           </div>
 
           <!-- Leads Table Container -->
@@ -226,7 +464,7 @@
                 <div class="col-header col-name">Name</div>
                 <div class="col-header col-phone">Phone number</div>
                 <div class="col-header col-query">User Query</div>
-                <div class="col-header col-platform">Platform</div>
+                <div class="col-header col-platform">Source</div>
                 <div class="col-header col-assignee">Assigned</div>
                 <div class="col-header col-status">Status</div>
                 <div class="col-header col-notes">Notes</div>
@@ -403,53 +641,15 @@
               <div class="window-expired-banner" id="windowExpiredBanner" style="display: none;">
                 <div class="expired-text">
                   <i class="fa-solid fa-lock"></i>
-                  <span>24-Hour messaging window is closed. Custom messages are disabled by WhatsApp Meta policy. You
-                    must send a Template message to re-open the window.</span>
+                  <span>24-Hour messaging window is closed. Custom messages are disabled by WhatsApp Meta policy.</span>
                 </div>
-                <button type="button" class="btn-use-template" id="useTemplateWindowBtn">
-                  <i class="fa-regular fa-note-sticky"></i> Select Template
-                </button>
               </div>
 
               <form id="sendMessageForm" class="message-form">
                 <div class="input-actions-left">
-                  <button type="button" class="composer-icon-btn" title="Quick Templates" id="quickTemplatesBtn">
-                    <i class="fa-regular fa-note-sticky"></i>
-                  </button>
                   <button type="button" class="composer-icon-btn" title="Attach Media or File" id="attachmentMenuBtn">
                     <i class="fa-solid fa-paperclip"></i>
                   </button>
-
-                  <!-- Quick Templates Popover -->
-                  <div class="templates-popover" id="templatesPopover" style="display: none;">
-                    <div class="popover-header">
-                      <span><i class="fa-regular fa-note-sticky" style="color: var(--crm-primary);"></i> Quick Test Replies</span>
-                      <button type="button" id="closeTemplatesBtn">&times;</button>
-                    </div>
-                    <div class="templates-list">
-                      <button type="button" class="template-item" data-text="Hi! Thank you for contacting us. How can I assist you today?">
-                        <span class="template-icon">👋</span>
-                        <div class="template-content">
-                          <strong>Welcome Greeting</strong>
-                          <p>Hi! Thank you for contacting us. How can I assist you today?</p>
-                        </div>
-                      </button>
-                      <button type="button" class="template-item" data-text="Hello! We have received your inquiry and our team is reviewing it.">
-                        <span class="template-icon">⏱️</span>
-                        <div class="template-content">
-                          <strong>Inquiry Acknowledgment</strong>
-                          <p>Hello! We have received your inquiry and our team is reviewing it.</p>
-                        </div>
-                      </button>
-                      <button type="button" class="template-item" data-text="Could you please share your requirement details so we can assist you better?">
-                        <span class="template-icon">❓</span>
-                        <div class="template-content">
-                          <strong>Requirement Request</strong>
-                          <p>Could you please share your requirement details so we can assist you better?</p>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
 
                   <!-- Attachment Popover -->
                   <div class="attachment-popover" id="attachmentPopover" style="display: none;">
@@ -546,10 +746,10 @@
                 </div>
               </div>
 
-              <!-- Tags / Platform -->
+              <!-- Tags / Source -->
               <div class="contact-tags-row">
-                <span class="contact-tag-label">Platform:</span>
-                <span class="tag-pill whatsapp" id="contactDetailsPlatformPill"><i class="fa-brands fa-whatsapp"></i> WhatsApp</span>
+                <span class="contact-tag-label">Source:</span>
+                <span class="tag-pill whatsapp" id="contactDetailsPlatformPill"><i class="fa-brands fa-whatsapp"></i> Direct WhatsApp</span>
                 <span class="tag-pill lead-type" id="contactDetailsCategory">Inbound Lead</span>
               </div>
             </div>
@@ -721,16 +921,16 @@
         </div>
       </section>
 
-      <!-- VIEW 5: SETTINGS & CHANGE PASSWORD -->
-      <section class="view-section" id="settingsViewSection" style="display: none;">
+      <!-- VIEW 5: CHANGE PASSWORD & ACCOUNT SECURITY -->
+      <section class="view-section" id="passwordViewSection" style="display: none;">
         <div class="settings-dashboard-container" style="padding: 24px 32px; width: 100%; height: 100%; flex: 1; overflow-y: auto; background-color: #f8fafc;">
-          <!-- Settings View Header -->
-          <div class="view-header" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+          <!-- View Header -->
+          <div class="view-header" style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
             <div class="header-title-wrap">
               <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-gear" style="color: var(--crm-primary);"></i> Settings & Security
+                <i class="fa-solid fa-key" style="color: var(--crm-primary);"></i> Change Password
               </h2>
-              <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Manage account security, password, and role-based permissions.</p>
+              <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Update your account password and review security status.</p>
             </div>
             <button type="button" class="header-notification-btn" title="Notifications">
               <i class="fa-regular fa-bell"></i>
@@ -738,18 +938,7 @@
             </button>
           </div>
 
-          <!-- Settings Navigation Tabs -->
-          <div class="settings-tabs-bar" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); margin-bottom: 24px; padding-bottom: 2px;">
-            <button type="button" class="settings-tab-btn active" id="settingsTabBtnAccount" data-tab="account" style="padding: 10px 18px; border: none; background: transparent; font-size: 13.5px; font-weight: 600; color: var(--crm-primary); border-bottom: 2px solid var(--crm-primary); cursor: pointer; display: flex; align-items: center; gap: 8px;">
-              <i class="fa-solid fa-user-shield"></i> Account & Security
-            </button>
-            <button type="button" class="settings-tab-btn" id="settingsTabBtnPermissions" data-tab="permissions" style="padding: 10px 18px; border: none; background: transparent; font-size: 13.5px; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer; display: none; align-items: center; gap: 8px;">
-              <i class="fa-solid fa-sliders"></i> User Permissions
-              <span class="user-role-badge super_admin" style="font-size: 10px; padding: 2px 6px;">Super Admin</span>
-            </button>
-          </div>
-
-          <!-- TAB 1: ACCOUNT & PASSWORD (ALL USERS) -->
+          <!-- Account & Password Grid -->
           <div id="settingsAccountTabPane" style="display: block;">
             <div class="settings-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; max-width: 1080px;">
               
@@ -778,11 +967,6 @@
                     <span id="settingsProfileSessionTime" style="font-weight: 600; color: var(--text-main);">Active</span>
                   </div>
                 </div>
-
-                <div style="margin-top: auto; padding: 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12.5px; color: #1e40af; line-height: 1.5;">
-                  <i class="fa-solid fa-circle-info" style="margin-right: 4px;"></i>
-                  All users (Super Admin, Sub Admin, and Maker) can change their own password at any time. Old password is required for security validation.
-                </div>
               </div>
 
               <!-- Change Password Card -->
@@ -797,239 +981,153 @@
                   </div>
                 </div>
 
-                <div id="passwordDisabledNotice" style="display: none; padding: 12px 14px; border-radius: 8px; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 13px; margin-bottom: 16px;">
-                  <i class="fa-solid fa-lock" style="margin-right: 6px;"></i> Password changes have been restricted for your account by the Super Admin.
-                </div>
-
                 <form id="changePasswordForm" class="settings-password-form" autocomplete="off">
-                  <!-- Alert Feedback Box -->
                   <div id="changePasswordAlert" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
-
-                  <!-- Old Password (MANDATORY) -->
+                  
                   <div class="form-group" style="margin-bottom: 16px;">
-                    <label for="oldPasswordInput" style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">
-                      <span>Current (Old) Password <strong style="color: #ef4444;">*</strong></span>
-                      <span style="color: #ef4444; font-size: 11px; font-weight: 500;">Mandatory</span>
-                    </label>
-                    <div class="input-with-icon" style="position: relative;">
-                      <input type="password" id="oldPasswordInput" placeholder="Enter your current password..." required autocomplete="current-password" style="width: 100%; height: 40px; padding: 8px 40px 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 13.5px; transition: border-color 0.2s;">
-                      <button type="button" class="btn-toggle-password" id="toggleOldPasswordBtn" title="Toggle password visibility" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #64748b; padding: 4px;">
-                        <i class="fa-solid fa-eye"></i>
-                      </button>
-                    </div>
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">Current Password *</label>
+                    <input type="password" id="oldPasswordInput" required style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
                   </div>
 
-                  <!-- New Password -->
                   <div class="form-group" style="margin-bottom: 16px;">
-                    <label for="newSettingsPasswordInput" style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">
-                      New Password <strong style="color: #ef4444;">*</strong>
-                    </label>
-                    <div class="input-with-icon" style="position: relative;">
-                      <input type="password" id="newSettingsPasswordInput" placeholder="Enter new password (min. 6 characters)..." required autocomplete="new-password" style="width: 100%; height: 40px; padding: 8px 40px 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 13.5px; transition: border-color 0.2s;">
-                      <button type="button" class="btn-toggle-password" id="toggleNewSettingsPasswordBtn" title="Toggle password visibility" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #64748b; padding: 4px;">
-                        <i class="fa-solid fa-eye"></i>
-                      </button>
-                    </div>
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">New Password *</label>
+                    <input type="password" id="newSettingsPasswordInput" required style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
                   </div>
 
-                  <!-- Confirm New Password -->
                   <div class="form-group" style="margin-bottom: 24px;">
-                    <label for="confirmNewPasswordInput" style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">
-                      Confirm New Password <strong style="color: #ef4444;">*</strong>
-                    </label>
-                    <div class="input-with-icon" style="position: relative;">
-                      <input type="password" id="confirmNewPasswordInput" placeholder="Re-type new password..." required autocomplete="new-password" style="width: 100%; height: 40px; padding: 8px 40px 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 13.5px; transition: border-color 0.2s;">
-                      <button type="button" class="btn-toggle-password" id="toggleConfirmPasswordBtn" title="Toggle password visibility" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #64748b; padding: 4px;">
-                        <i class="fa-solid fa-eye"></i>
-                      </button>
-                    </div>
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">Confirm Password *</label>
+                    <input type="password" id="confirmNewPasswordInput" required style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
                   </div>
 
                   <div style="display: flex; justify-content: flex-end; gap: 12px;">
-                    <button type="button" id="resetChangePasswordFormBtn" class="btn-secondary" style="padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; color: #475569;">
-                      Clear
-                    </button>
-                    <button type="submit" id="submitChangePasswordBtn" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 9px 22px; border-radius: 8px; background: var(--crm-primary); color: #ffffff; font-weight: 600; font-size: 13px; border: none; cursor: pointer;">
-                      <i class="fa-solid fa-shield-check"></i> Update Password
+                    <button type="submit" id="submitChangePasswordBtn" class="btn-primary" style="padding: 9px 22px; border-radius: 8px; background: var(--crm-primary); color: #fff; border: none; cursor: pointer;">
+                      Update Password
                     </button>
                   </div>
                 </form>
               </div>
-
             </div>
-          </div>
-
-          <!-- TAB 2: USER PERMISSIONS (SUPER ADMIN ONLY) -->
-          <div id="settingsPermissionsTabPane" style="display: none; max-width: 1080px;">
-            <!-- Select User Banner -->
-            <div class="settings-card" style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 12px; padding: 20px 24px; box-shadow: var(--shadow-sm); margin-bottom: 20px;">
-              <div style="margin-bottom: 14px;">
-                <h3 style="font-size: 15px; font-weight: 700; color: var(--text-main); margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
-                  <i class="fa-solid fa-user-gear" style="color: var(--crm-primary);"></i> Select Sub Admin or Maker to Configure Permissions
-                </h3>
-                <p style="font-size: 12.5px; color: #64748b; margin: 0;">Choose a team member to review and customize their role-based access permissions.</p>
-              </div>
-
-              <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;">
-                <div style="flex: 1; min-width: 280px; max-width: 540px;">
-                  <select id="permUserSelect" class="custom-form-select" style="width: 100%; height: 42px; padding: 0 14px; font-size: 13.5px; font-weight: 600; border-radius: 8px; border: 1px solid #cbd5e1; background-color: #ffffff; color: var(--text-main); cursor: pointer; box-shadow: var(--shadow-xs);">
-                    <!-- Dynamically populated -->
-                  </select>
-                </div>
-
-                <div id="permSelectedUserBadge" style="display: flex; align-items: center; gap: 12px; padding: 6px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; height: 42px;">
-                  <div class="user-avatar-initials" id="permUserAvatar" style="width: 30px; height: 30px; font-size: 12px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-radius: 50%; display: flex; align-items: center; justify-content: center;">TU</div>
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <strong id="permUserName" style="font-size: 13px; color: var(--text-main); font-weight: 700;">Select User</strong>
-                    <span id="permUserRoleBadge" class="user-role-badge maker" style="font-size: 10px; padding: 2px 6px; border-radius: 4px;">MAKER</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Empty State if No Sub Users -->
-            <div id="permNoUsersEmptyState" style="display: none; background: #ffffff; border: 1px solid var(--border-color); border-radius: 12px; padding: 48px 24px; text-align: center;">
-              <div style="width: 60px; height: 60px; border-radius: 50%; background: #f1f5f9; color: #94a3b8; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px;">
-                <i class="fa-solid fa-users-slash"></i>
-              </div>
-              <h3 style="font-size: 16px; font-weight: 700; color: var(--text-main); margin-bottom: 6px;">No Sub-Users Created Yet</h3>
-              <p style="font-size: 13px; color: #64748b; max-width: 440px; margin: 0 auto 16px auto;">
-                Create Sub Admins or Makers in the Team Management tab to configure their permissions.
-              </p>
-            </div>
-
-            <!-- Permissions Form -->
-            <div id="permControlsContainer" class="settings-card" style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-sm);">
-              <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 16px;">
-                <div>
-                  <h3 style="font-size: 16px; font-weight: 700; color: var(--text-main); margin: 0 0 4px 0;">
-                    Access Permissions Matrix
-                  </h3>
-                  <p style="font-size: 12.5px; color: #64748b; margin: 0;">
-                    Toggle check-boxes to grant or revoke specific abilities for this account.
-                  </p>
-                </div>
-
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                  <button type="button" id="btnPermSelectAll" class="btn-secondary" style="padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px;">
-                    <i class="fa-solid fa-check-double"></i> Grant All
-                  </button>
-                  <button type="button" id="btnPermRevokeAll" class="btn-secondary" style="padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px;">
-                    <i class="fa-solid fa-xmark"></i> Revoke All
-                  </button>
-                  <button type="button" id="btnPermResetDefault" class="btn-secondary" style="padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px;">
-                    <i class="fa-solid fa-rotate-left"></i> Role Defaults
-                  </button>
-                </div>
-              </div>
-
-              <form id="userPermissionsForm">
-                <div class="permissions-checkbox-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px;">
-                  
-                  <!-- 1. Can Add Lead -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canAddLead" name="canAddLead" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-solid fa-user-plus" style="color: #3b82f6; width: 18px;"></i> Can Add New Lead</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Create and add new leads to CRM dashboard.</span>
-                    </div>
-                  </label>
-
-                  <!-- 2. Can Delete Lead -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canDeleteLead" name="canDeleteLead" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-regular fa-trash-can" style="color: #ef4444; width: 18px;"></i> Can Delete Lead</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Permanently delete lead records and conversations.</span>
-                    </div>
-                  </label>
-
-                  <!-- 3. Can Message -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canSendMessage" name="canSendMessage" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-brands fa-whatsapp" style="color: #10b981; width: 18px;"></i> Can Message</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Send text, media & documents via WhatsApp composer.</span>
-                    </div>
-                  </label>
-
-                  <!-- 4. Add Note -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canAddNote" name="canAddNote" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-regular fa-note-sticky" style="color: #f59e0b; width: 18px;"></i> Add Note</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Add internal notes and remarks to leads & contacts.</span>
-                    </div>
-                  </label>
-
-                  <!-- 5. Can Download Excel -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canExportExcel" name="canExportExcel" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-solid fa-file-excel" style="color: #16a34a; width: 18px;"></i> Can Download Excel</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Export filtered lead lists & records to Excel.</span>
-                    </div>
-                  </label>
-
-                  <!-- 6. Can Assign Lead -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canAssignLead" name="canAssignLead" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-solid fa-user-tag" style="color: #8b5cf6; width: 18px;"></i> Can Assign Lead</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Assign or reassign leads to another maker or sub admin.</span>
-                    </div>
-                  </label>
-
-                  <!-- 7. Can See Logs -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canViewLogs" name="canViewLogs" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-solid fa-clock-rotate-left" style="color: #6366f1; width: 18px;"></i> Can See Logs</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Access the CRM activity audit logs timeline.</span>
-                    </div>
-                  </label>
-
-                  <!-- 8. Can See Teams -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canViewTeams" name="canViewTeams" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-solid fa-users-gear" style="color: #ec4899; width: 18px;"></i> Can See Teams</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">View the team members management screen.</span>
-                    </div>
-                  </label>
-
-                  <!-- 9. Can Change Password -->
-                  <label class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canChangePassword" name="canChangePassword" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-solid fa-key" style="color: #14b8a6; width: 18px;"></i> Can Change Password</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Allow user to update their own password in Settings.</span>
-                    </div>
-                  </label>
-
-                  <!-- 10. Can Manage Permissions (Sub Admin) -->
-                  <label id="permCard_canManagePermissions" class="perm-checkbox-card" style="display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s;">
-                    <input type="checkbox" id="perm_canManagePermissions" name="canManagePermissions" style="width: 18px; height: 18px; margin-top: 2px; cursor: pointer; accent-color: var(--crm-primary);">
-                    <div>
-                      <strong style="display: block; font-size: 13.5px; color: var(--text-main);"><i class="fa-solid fa-sliders" style="color: #f43f5e; width: 18px;"></i> Can Manage Permissions</strong>
-                      <span style="display: block; font-size: 12px; color: #64748b; margin-top: 2px;">Allow Sub Admin to configure permissions for Makers.</span>
-                    </div>
-                  </label>
-
-                </div>
-
-                <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #f1f5f9; padding-top: 18px;">
-                  <button type="submit" id="savePermissionsBtn" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 24px; border-radius: 8px; background: var(--crm-primary); color: #ffffff; font-weight: 600; font-size: 13.5px; border: none; cursor: pointer;">
-                    <i class="fa-solid fa-floppy-disk"></i> Save Permissions
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
           </div>
         </div>
       </section>
+
+      <!-- VIEW 6: ROLES & PERMISSIONS (RBAC FULL PAGE) -->
+      <section class="view-section" id="permissionsViewSection" style="display: none;">
+        <div class="settings-dashboard-container rbac-dashboard-container">
+          <!-- Header -->
+          <div class="rbac-header-section">
+            <div class="rbac-title-row">
+              <div>
+                <h1 class="rbac-page-title">Roles & Permissions</h1>
+                <p class="rbac-page-subtitle">Super Admin only — assign roles and control exactly what each role can do</p>
+              </div>
+              <button type="button" class="header-notification-btn" title="Notifications">
+                <i class="fa-regular fa-bell"></i>
+                <span class="header-notif-badge" style="display: none;">0</span>
+              </button>
+            </div>
+
+            <!-- Role Filter Pills -->
+            <div class="rbac-filter-pills-row" id="rbacRoleFilterPills">
+              <button type="button" class="rbac-filter-pill active" data-role="all">
+                All Users <span class="rbac-pill-badge" id="rbacPillCount_all">3</span>
+              </button>
+              <button type="button" class="rbac-filter-pill" data-role="super_admin">
+                Super Admin <span class="rbac-pill-badge" id="rbacPillCount_super_admin">1</span>
+              </button>
+              <button type="button" class="rbac-filter-pill" data-role="sub_admin">
+                Sub Admin <span class="rbac-pill-badge" id="rbacPillCount_sub_admin">1</span>
+              </button>
+              <button type="button" class="rbac-filter-pill" data-role="maker">
+                Maker <span class="rbac-pill-badge" id="rbacPillCount_maker">1</span>
+              </button>
+            </div>
+
+            <!-- View Switcher Tabs -->
+            <div class="rbac-view-tabs-row">
+              <button type="button" id="rbacTabBtnAssign" class="rbac-tab-btn active">
+                <i class="fa-solid fa-users"></i> Assign Roles
+              </button>
+              <button type="button" id="rbacTabBtnDefinitions" class="rbac-tab-btn">
+                <i class="fa-solid fa-shield-halved"></i> Role Definitions
+              </button>
+            </div>
+          </div>
+
+          <!-- PANE 1: ASSIGN ROLES (USER TABLE) -->
+          <div id="rbacAssignRolesPane" class="rbac-tab-pane active">
+            <!-- Search Bar -->
+            <div class="rbac-search-row">
+              <div class="rbac-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="rbacUserSearchInput" placeholder="Search by name or email...">
+              </div>
+              <div class="rbac-user-count-badge" id="rbacUserCountLabel">3 users</div>
+            </div>
+
+            <!-- Users Table Card -->
+            <div class="rbac-table-card">
+              <table class="rbac-users-table">
+                <thead>
+                  <tr>
+                    <th style="width: 30%;">USER</th>
+                    <th style="width: 28%;">EMAIL</th>
+                    <th style="width: 24%;">PERMISSIONS</th>
+                    <th style="width: 18%;">ROLE</th>
+                  </tr>
+                </thead>
+                <tbody id="rbacUsersTableBody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PANE 2: ROLE DEFINITIONS -->
+          <div id="rbacRoleDefinitionsPane" class="rbac-tab-pane" style="display: none;">
+            <div class="rbac-def-header-row">
+              <p class="rbac-def-desc">
+                Control exactly what each role can do. Edits apply on each user's next login; APIs enforce immediately.
+              </p>
+            </div>
+
+            <!-- All Roles Section Card -->
+            <div class="rbac-roles-card">
+              <div class="rbac-roles-card-header">
+                <h3>All Roles</h3>
+                <p>Click a role to edit its permissions. Super Admin is locked to full access.</p>
+              </div>
+
+              <div class="rbac-roles-list" id="rbacRoleCardsList">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Role Permissions Edit Modal (Categorized 2-Column Grid) -->
+    <div class="modal-overlay" id="rolePermissionsModal" style="display: none; z-index: 10000;">
+      <div class="modal-card role-perm-modal-card">
+        <div class="modal-header role-perm-modal-header">
+          <div class="role-perm-title-wrap">
+            <h2 id="rolePermModalTitle">SUB ADMIN</h2>
+            <p id="rolePermModalSubtitle">Toggle what this role can do. Changes apply on each user's next login.</p>
+          </div>
+          <button type="button" id="closeRolePermModalBtn" class="modal-close-btn">&times;</button>
+        </div>
+
+        <div class="role-perm-modal-body" id="rolePermModalBody">
+          <!-- Dynamically populated categorized 2-column checklist -->
+        </div>
+
+        <div class="role-perm-modal-footer">
+          <button type="button" id="cancelRolePermModalBtn" class="btn-secondary">Cancel</button>
+          <button type="button" id="saveRolePermsBtn" class="btn-primary btn-save-role-perms">Save Permissions</button>
+        </div>
+      </div>
+    </div>
     </main>
 
     <!-- Add New Lead Modal -->
@@ -1051,15 +1149,77 @@
 
           <div class="form-group-row" style="display: flex; gap: 12px; margin-bottom: 14px;">
             <div style="flex: 1;">
-              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Phone Number *</label>
-              <input type="tel" id="newLeadPhone" placeholder="e.g. +91 9876543210" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Phone Number <span style="color: #ef4444;">*</span></label>
+              <div class="phone-input-group" style="display: flex; gap: 6px;">
+                <select id="newLeadCountryCode" class="custom-form-select phone-country-select" style="width: 116px; flex-shrink: 0; padding: 6px 20px 6px 8px; font-size: 12px; font-weight: 500;">
+                  <option value="+91" selected>🇮🇳 +91 (IN)</option>
+                  <option value="+1">🇺🇸 +1 (US)</option>
+                  <option value="+44">🇬🇧 +44 (UK)</option>
+                  <option value="+971">🇦🇪 +971 (AE)</option>
+                  <option value="+966">🇸🇦 +966 (SA)</option>
+                  <option value="+65">🇸🇬 +65 (SG)</option>
+                  <option value="+61">🇦🇺 +61 (AU)</option>
+                  <option value="+1">🇨🇦 +1 (CA)</option>
+                  <option value="+49">🇩🇪 +49 (DE)</option>
+                  <option value="+33">🇫🇷 +33 (FR)</option>
+                  <option value="+81">🇯🇵 +81 (JP)</option>
+                  <option value="+86">🇨🇳 +86 (CN)</option>
+                  <option value="+880">🇧🇩 +880 (BD)</option>
+                  <option value="+977">🇳🇵 +977 (NP)</option>
+                  <option value="+94">🇱🇰 +94 (LK)</option>
+                  <option value="+92">🇵🇰 +92 (PK)</option>
+                  <option value="+60">🇲🇾 +60 (MY)</option>
+                  <option value="+62">🇮🇩 +62 (ID)</option>
+                  <option value="+63">🇵🇭 +63 (PH)</option>
+                  <option value="+64">🇳🇿 +64 (NZ)</option>
+                  <option value="+27">🇿🇦 +27 (ZA)</option>
+                  <option value="+7">🇷🇺 +7 (RU)</option>
+                  <option value="+39">🇮🇹 +39 (IT)</option>
+                  <option value="+34">🇪🇸 +34 (ES)</option>
+                  <option value="+31">🇳🇱 +31 (NL)</option>
+                  <option value="+41">🇨🇭 +41 (CH)</option>
+                  <option value="+46">🇸🇪 +46 (SE)</option>
+                  <option value="+47">🇳🇴 +47 (NO)</option>
+                  <option value="+45">🇩🇰 +45 (DK)</option>
+                  <option value="+48">🇵🇱 +48 (PL)</option>
+                  <option value="+353">🇮🇪 +353 (IE)</option>
+                  <option value="+351">🇵🇹 +351 (PT)</option>
+                  <option value="+30">🇬🇷 +30 (GR)</option>
+                  <option value="+90">🇹🇷 +90 (TR)</option>
+                  <option value="+20">🇪🇬 +20 (EG)</option>
+                  <option value="+234">🇳🇬 +234 (NG)</option>
+                  <option value="+254">🇰🇪 +254 (KE)</option>
+                  <option value="+55">🇧🇷 +55 (BR)</option>
+                  <option value="+52">🇲🇽 +52 (MX)</option>
+                  <option value="+965">🇰🇼 +965 (KW)</option>
+                  <option value="+974">🇶🇦 +974 (QA)</option>
+                  <option value="+968">🇴🇲 +968 (OM)</option>
+                  <option value="+973">🇧🇭 +973 (BH)</option>
+                  <option value="+852">🇭🇰 +852 (HK)</option>
+                  <option value="+66">🇹🇭 +66 (TH)</option>
+                  <option value="+84">🇻🇳 +84 (VN)</option>
+                  <option value="+82">🇰🇷 +82 (KR)</option>
+                </select>
+                <input type="tel" id="newLeadPhone" placeholder="e.g. 9876543210" required style="flex: 1; min-width: 0; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
+              </div>
             </div>
             <div style="flex: 1;">
-              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Platform</label>
-              <select id="newLeadPlatform" class="custom-form-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
-                <option value="CRM" selected>CRM</option>
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Source <span style="color: #ef4444;">*</span></label>
+              <select id="newLeadSource" required class="custom-form-select" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
+                <option value="" disabled selected>Select Source...</option>
+                <option value="Website">Website</option>
+                <option value="Message">Message</option>
+                <option value="Direct WhatsApp">Direct WhatsApp</option>
+                <option value="Direct Phone call">Direct Phone call</option>
+                <option value="Other">Other</option>
               </select>
             </div>
+          </div>
+
+          <!-- Dynamic Custom Source input (shown when Other is selected) -->
+          <div class="form-group" id="newLeadCustomSourceGroup" style="display: none; margin-bottom: 14px;">
+            <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text-main);">Specify Custom Source <span style="color: #ef4444;">*</span></label>
+            <input type="text" id="newLeadCustomSource" placeholder="e.g. Instagram, Referral, Walk-in, Trade Fair..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 13px;">
           </div>
 
           <div class="form-group-row" style="display: flex; gap: 12px; margin-bottom: 14px;">
@@ -1127,7 +1287,7 @@
       <div class="modal-card team-modal-card" style="max-width: 650px; width: 90%;">
         <div class="modal-header">
           <div class="modal-title-wrap">
-            <i class="fa-solid fa-users-gear" style="color: #2563eb;"></i>
+            <i class="fa-solid fa-users-gear" style="color: var(--crm-primary);"></i>
             <h3>Team & Sub-Users Management</h3>
           </div>
           <button id="closeTeamModalBtn" class="modal-close-btn">&times;</button>
@@ -1480,7 +1640,6 @@
       </div>
     </div>
 
-    <!-- Quick Templates Popover -->
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer"></div>
 

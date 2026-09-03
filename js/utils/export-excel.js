@@ -137,7 +137,7 @@ export async function exportLeadsToExcel(leadsToExport) {
         { header: 'Name', key: 'name', width: 22 },
         { header: 'Phone number', key: 'phone', width: 20 },
         { header: 'User Query', key: 'query', width: 50 },
-        { header: 'Platform', key: 'platform', width: 14 },
+        { header: 'Source', key: 'source', width: 18 },
         { header: 'Status', key: 'status', width: 16 },
         { header: 'Notes', key: 'notes', width: 35 },
         { header: 'Created Date', key: 'created', width: 26 }
@@ -147,9 +147,8 @@ export async function exportLeadsToExcel(leadsToExport) {
       leadsToExport.forEach(lead => {
         const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
         const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
-        const phone = formatDisplayPhone(lead.phone || lead.id);
-        const userFirstQuery = getUserFirstQuery(lead);
-        const platform = "WhatsApp";
+        const isMetaAd = Boolean(lead.referral || (lead.source && (lead.source.toLowerCase().includes('meta') || lead.source.toLowerCase().includes('ad'))));
+        const source = isMetaAd ? 'Meta Ads' : (lead.source || lead.platform || 'Direct WhatsApp');
         const notesList = getLeadNotesList(lead);
         const leadNotesStr = notesList.map(n => `[${n.authorName || 'Agent'} - ${formatFullDateTime(n.createdAt)}]: ${n.text}`).join('\n') || (typeof lead.notes === 'string' ? lead.notes : '');
 
@@ -170,7 +169,7 @@ export async function exportLeadsToExcel(leadsToExport) {
           name: displayName,
           phone: phone,
           query: userFirstQuery,
-          platform: platform,
+          source: source,
           status: status,
           notes: leadNotesStr,
           created: createdDate
@@ -179,78 +178,89 @@ export async function exportLeadsToExcel(leadsToExport) {
 
       // Style Header Row (Row 1): Royal Blue background (#1D4ED8) with Bold White Text (#FFFFFF)
       const headerRow = worksheet.getRow(1);
-      headerRow.height = 32;
+      headerRow.height = 28;
       headerRow.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF1D4ED8' }
-        };
         cell.font = {
           name: 'Segoe UI',
           size: 11,
           bold: true,
           color: { argb: 'FFFFFFFF' }
         };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF1D4ED8' }
+        };
         cell.alignment = {
           vertical: 'middle',
           horizontal: 'center',
           wrapText: true
         };
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FF1E40AF' } },
-          left: { style: 'thin', color: { argb: 'FF1E40AF' } },
-          bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
-          right: { style: 'thin', color: { argb: 'FF1E40AF' } }
-        };
       });
 
       // Style Data Rows
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber > 1) {
-          row.height = 24;
-          row.eachCell((cell, colNumber) => {
-            cell.font = { name: 'Segoe UI', size: 10.5 };
-            cell.alignment = {
-              vertical: 'middle',
-              horizontal: (colNumber === 1 || colNumber === 2 || colNumber === 3 || colNumber === 6) ? 'left' : 'center',
-              wrapText: true
+        if (rowNumber === 1) return; // Skip header
+
+        row.height = 24;
+        const isEven = rowNumber % 2 === 0;
+
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          cell.font = {
+            name: 'Segoe UI',
+            size: 10,
+            color: { argb: 'FF0F172A' }
+          };
+
+          if (isEven) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF8FAFC' }
             };
-            cell.border = {
-              top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-              left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-              bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-              right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
-            };
-            if (rowNumber % 2 === 0) {
-              cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFF8FAFC' }
-              };
-            }
-          });
-        }
+          }
+
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+          };
+
+          if (colNumber === 1 || colNumber === 2 || colNumber === 3 || colNumber === 6) {
+            cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: colNumber === 3 || colNumber === 6 };
+          } else {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          }
+
+          if (colNumber === 1) {
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+          }
+
+          if (colNumber === 2) {
+            cell.numFmt = '@';
+          }
+        });
       });
 
+      // Generate Buffer and Trigger Download
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.setAttribute('download', filename);
+      link.download = `leads_export_${dateStr}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      showToast(`Exported ${leadsToExport.length} leads to Excel (.xlsx) with Blue Header!`, 'info');
+      URL.revokeObjectURL(link.href);
       return;
     } catch (err) {
-      console.warn("ExcelJS export error, falling back:", err);
+      console.warn("ExcelJS Export failed, using rich HTML table fallback:", err);
     }
   }
 
   // Fallback HTML XML format
-  const headers = ["Name", "Phone number", "User Query", "Platform", "Status", "Notes", "Created Date"];
+  const headers = ["Name", "Phone number", "User Query", "Source", "Status", "Notes", "Created Date"];
   let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
@@ -276,8 +286,8 @@ export async function exportLeadsToExcel(leadsToExport) {
     const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
     const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
     const phone = formatDisplayPhone(lead.phone || lead.id);
-    const userFirstQuery = getUserFirstQuery(lead);
-    const platform = "WhatsApp";
+    const isMetaAd = Boolean(lead.referral || (lead.source && (lead.source.toLowerCase().includes('meta') || lead.source.toLowerCase().includes('ad'))));
+    const source = isMetaAd ? 'Meta Ads' : (lead.source || lead.platform || 'Direct WhatsApp');
     const statusRaw = (lead.status || 'new').toLowerCase();
     const statusMap = { 'new': 'New', 'contacted': 'Contacted', 'no_answer': 'No Answer', 'follow_up': 'Follow Up', 'converted': 'Converted', 'lost': 'Lost', 'deleted': 'Deleted' };
     const status = statusMap[statusRaw] || statusRaw.toUpperCase();
@@ -289,7 +299,7 @@ export async function exportLeadsToExcel(leadsToExport) {
       <td style="font-weight: 600; text-align: left;">${escapeHtml(displayName)}</td>
       <td style="mso-number-format:'\\@'; text-align: left;">${escapeHtml(phone)}</td>
       <td style="text-align: left;">${escapeHtml(userFirstQuery)}</td>
-      <td style="text-align: center;"><span style="color: #15803d; font-weight: 600;">${escapeHtml(platform)}</span></td>
+      <td style="text-align: center;"><span style="color: #15803d; font-weight: 600;">${escapeHtml(source)}</span></td>
       <td style="text-align: center;"><span style="font-weight: 600;">${escapeHtml(status)}</span></td>
       <td style="text-align: left;">${leadNotesStr}</td>
       <td style="text-align: center;">${escapeHtml(createdDate)}</td>

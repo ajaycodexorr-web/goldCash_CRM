@@ -11,6 +11,12 @@ export const state = {
   // Search & Filter
   leadsSearchQuery: '',
   leadsFilter: 'all', // 'all' | 'new' | 'contacted' | 'no_answer' | 'follow_up' | 'converted' | 'lost' | 'deleted'
+  leadsDateFilter: {
+    preset: 'all',
+    startDate: null,
+    endDate: null,
+    label: 'All Time'
+  },
   convSearchQuery: '',
   convFilter: 'all', // 'all' | 'unread'
 
