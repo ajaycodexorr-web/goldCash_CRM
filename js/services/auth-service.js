@@ -7,7 +7,7 @@ import { elements } from '../dom/elements.js';
 import { loadTeamMembers, saveTeamMembers, syncUsersFromFirestore, syncRolesFromFirestore } from './user-service.js';
 import { showToast } from '../utils/notifications.js';
 import { addAuditLog } from './logging-service.js';
-import { initializeFirebase, firebaseSignInWithEmail, firebaseCreateAuthUser, firebaseSignOutUser, onFirebaseAuthStateChanged, getCurrentAuthUser, saveUserToFirestore } from '../../firebase-config.js';
+import { initializeFirebase, firebaseSignInWithEmail, firebaseCreateAuthUser, firebaseSignOutUser, onFirebaseAuthStateChanged, getCurrentAuthUser, saveUserToFirestore, fetchUsersFromFirestore } from '../../firebase-config.js';
 
 const SESSION_KEY = 'crm_auth_session_v1';
 
@@ -75,86 +75,77 @@ export async function loginUser(email, password) {
     console.warn("Firebase Native Auth attempt:", fbErr.code || fbErr.message);
   }
 
-  // 2. Check local/Firestore team member profile
-  let user = state.teamMembers.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
-
-  // If user authenticated via Firebase but doesn't exist in teamMembers list, auto-create profile
-  if (firebaseAuthSuccess && !user) {
-    user = {
-      id: 'usr_' + Date.now(),
-      name: cleanEmail.split('@')[0],
-      email: cleanEmail,
-      role: cleanEmail.includes('admin') ? 'super_admin' : 'maker',
-      status: 'active'
-    };
-    state.teamMembers.push(user);
-    saveTeamMembers();
-  }
-
-  // Fallback verification if not registered in Firebase Auth yet (during migration / bootstrap)
+  // Fallback bootstrap for root admin if not registered yet in Firebase Auth
   if (!firebaseAuthSuccess) {
-    if (!user) {
-      if (cleanEmail === 'admin@goldcash.com' && cleanPass === 'admin123') {
-        try {
-          await firebaseCreateAuthUser(cleanEmail, cleanPass);
-          firebaseAuthSuccess = true;
-          user = {
-            id: 'usr_admin',
-            name: 'Super Admin',
-            email: cleanEmail,
-            role: 'super_admin',
-            status: 'active'
-          };
-          state.teamMembers.push(user);
-          saveTeamMembers();
-        } catch (createErr) {
-          if (createErr.code === 'auth/email-already-in-use') {
-            throw new Error('Invalid Password for Firebase Account');
-          }
-          throw createErr;
-        }
-      } else {
-        const msg = authError?.code === 'auth/invalid-credential' || authError?.code === 'auth/wrong-password' || authError?.code === 'auth/user-not-found'
-          ? 'Invalid Email or Password'
-          : (authError?.message || 'Invalid Email or Password');
-        throw new Error(msg);
-      }
-    } else {
-      const storedPass = (user.password || '').trim();
-      const isPassValid = !storedPass || storedPass === cleanPass || storedPass.toLowerCase() === cleanPass.toLowerCase();
-
-      if (!isPassValid) {
-        throw new Error('Invalid Email or Password');
-      }
-
-      // Auto-register into Firebase Auth if password matched locally
+    if (cleanEmail === 'admin@goldcash.com' && cleanPass === 'admin123') {
       try {
         await firebaseCreateAuthUser(cleanEmail, cleanPass);
-        console.log(`✅ [Firebase Auth] Auto-registered ${cleanEmail} into Firebase Auth`);
         firebaseAuthSuccess = true;
       } catch (createErr) {
         if (createErr.code === 'auth/email-already-in-use') {
           throw new Error('Invalid Password for Firebase Account');
         }
+        throw createErr;
       }
+    } else {
+      const msg = authError?.code === 'auth/invalid-credential' || authError?.code === 'auth/wrong-password' || authError?.code === 'auth/user-not-found'
+        ? 'Invalid Email or Password'
+        : (authError?.message || 'Invalid Email or Password');
+      throw new Error(msg);
     }
   }
 
-  if (user && user.status === 'disabled') {
-    throw new Error('Your account has been disabled by Admin. Please contact support.');
+  // 2. Fetch latest team members from Firestore to verify user is active and has not been deleted
+  let membersList = state.teamMembers || [];
+  try {
+    const fUsers = await fetchUsersFromFirestore();
+    if (fUsers && fUsers.length > 0) {
+      membersList = fUsers;
+      state.teamMembers = fUsers;
+      saveTeamMembers();
+    }
+  } catch (e) {}
+
+  let user = membersList.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
+
+  // 3. For sub-users (non-root admin), if deleted from Firestore / Team, BLOCK LOGIN immediately
+  if (cleanEmail !== 'admin@goldcash.com') {
+    if (!user) {
+      // User was deleted by admin! Sign out from Firebase Auth and reject
+      await firebaseSignOutUser();
+      throw new Error('Your account has been deleted by Admin. Please contact support.');
+    }
+
+    if (user.status === 'disabled') {
+      await firebaseSignOutUser();
+      throw new Error('Your account has been disabled by Admin. Please contact support.');
+    }
+  } else {
+    // Root Super Admin profile
+    if (!user) {
+      user = {
+        id: 'usr_admin',
+        name: 'Super Admin',
+        email: cleanEmail,
+        role: 'super_admin',
+        status: 'active'
+      };
+      state.teamMembers.push(user);
+      saveTeamMembers();
+    }
   }
 
-  // 3. Now that Firebase Auth is authenticated, save user document under Firebase UID and sync roles & users from Firestore
+  // 4. Save Super Admin doc under Firebase UID and sync roles/users
   try {
     const authUser = getCurrentAuthUser();
-    if (authUser && user) {
+    if (authUser && user && cleanEmail === 'admin@goldcash.com') {
       user.firebaseUid = authUser.uid;
       await saveUserToFirestore({
         ...user,
         id: authUser.uid,
         email: cleanEmail,
-        role: user.role || (cleanEmail.includes('admin') ? 'super_admin' : 'maker'),
-        status: user.status || 'active'
+        role: 'super_admin',
+        status: 'active'
       });
     }
     await syncRolesFromFirestore();
@@ -195,39 +186,69 @@ export function initAuthCheck(onAuthenticated) {
   loadTeamMembers();
 
   // Listen to Firebase Auth state
-  onFirebaseAuthStateChanged((fbUser) => {
+  onFirebaseAuthStateChanged(async (fbUser) => {
     if (fbUser && fbUser.email) {
       const email = fbUser.email.toLowerCase();
+
+      // If not primary super admin, verify user exists in Firestore team members list and is active
+      if (email !== 'admin@goldcash.com') {
+        let membersList = state.teamMembers || [];
+        try {
+          const fUsers = await fetchUsersFromFirestore();
+          if (fUsers && fUsers.length > 0) {
+            membersList = fUsers;
+            state.teamMembers = fUsers;
+            saveTeamMembers();
+          }
+        } catch (e) {}
+
+        const user = membersList.find(u => (u.email && u.email.toLowerCase() === email) || u.id === fbUser.uid);
+
+        if (!user || user.status === 'disabled') {
+          // Account was deleted or disabled by Admin -> terminate session immediately
+          await firebaseSignOutUser();
+          clearAuthSession();
+          state.currentUser = null;
+          document.documentElement.className = 'is-unauthenticated';
+          return;
+        }
+
+        state.currentUser = user;
+        saveAuthSession(user);
+        document.documentElement.className = 'is-authenticated';
+        if (onAuthenticated) onAuthenticated(user);
+        return;
+      }
+
+      // Root Super Admin
       let user = state.teamMembers.find(u => (u.email && u.email.toLowerCase() === email));
       if (!user) {
         user = {
-          id: fbUser.uid || ('usr_' + Date.now()),
-          name: email.split('@')[0],
+          id: fbUser.uid || 'usr_admin',
+          name: 'Super Admin',
           email: email,
-          role: email.includes('admin') ? 'super_admin' : 'maker',
+          role: 'super_admin',
           status: 'active'
         };
         state.teamMembers.push(user);
         saveTeamMembers();
       }
 
-      if (user.status !== 'disabled') {
-        state.currentUser = user;
-        saveAuthSession(user);
-        document.documentElement.className = 'is-authenticated';
-        saveUserToFirestore({
-          ...user,
-          id: fbUser.uid,
-          email: email,
-          role: user.role || (email.includes('admin') ? 'super_admin' : 'maker'),
-          status: user.status || 'active'
-        }).catch(() => {});
-        if (onAuthenticated) onAuthenticated(user);
-        return;
-      }
+      state.currentUser = user;
+      saveAuthSession(user);
+      document.documentElement.className = 'is-authenticated';
+      saveUserToFirestore({
+        ...user,
+        id: fbUser.uid,
+        email: email,
+        role: 'super_admin',
+        status: 'active'
+      }).catch(() => {});
+      if (onAuthenticated) onAuthenticated(user);
+      return;
     }
 
-    // Unauthenticated or disabled user -> enforce login screen
+    // Unauthenticated user -> enforce login screen
     clearAuthSession();
     state.currentUser = null;
     document.documentElement.className = 'is-unauthenticated';
@@ -243,7 +264,7 @@ export function checkUserDisabledAndEnforceLogout() {
 
   let membersList = state.teamMembers || [];
   try {
-    const saved = localStorage.getItem('crm_team_members_v1');
+    const saved = localStorage.getItem('crm_team_members_v3');
     if (saved) {
       membersList = JSON.parse(saved);
     }
@@ -254,11 +275,12 @@ export function checkUserDisabledAndEnforceLogout() {
     (currentEmail && u.email && u.email.toLowerCase() === currentEmail.toLowerCase())
   );
 
-  const isDisabled = (latest && latest.status === 'disabled') || (state.currentUser && state.currentUser.status === 'disabled');
+  const isDeletedOrMissing = !latest && currentEmail && currentEmail !== 'admin@goldcash.com';
+  const isDisabled = isDeletedOrMissing || (latest && latest.status === 'disabled') || (state.currentUser && state.currentUser.status === 'disabled');
 
   if (isDisabled) {
     logoutUser(() => {
-      showToast("Your account has been disabled by Admin.", "error");
+      showToast(isDeletedOrMissing ? "Your account has been removed by Admin." : "Your account has been disabled by Admin.", "error");
     });
     return true;
   }
