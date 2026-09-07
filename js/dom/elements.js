@@ -3,7 +3,15 @@
  */
 
 export const elements = {
-  // Navigation Sidebar
+  // Navigation Sidebar & Mobile Drawer
+  navSidebar: document.getElementById('navSidebar'),
+  sidebarBackdrop: document.getElementById('sidebarBackdrop'),
+  sidebarCloseBtn: document.getElementById('sidebarCloseBtn'),
+  leadsMenuToggleBtn: document.getElementById('leadsMenuToggleBtn'),
+  convMenuToggleBtn: document.getElementById('convMenuToggleBtn'),
+  logsMenuToggleBtn: document.getElementById('logsMenuToggleBtn'),
+  teamMenuToggleBtn: document.getElementById('teamMenuToggleBtn'),
+  settingsMenuToggleBtn: document.getElementById('settingsMenuToggleBtn'),
   navItemLeads: document.getElementById('navItemLeads'),
   navItemConversations: document.getElementById('navItemConversations'),
   navItemLogs: document.getElementById('navItemLogs'),

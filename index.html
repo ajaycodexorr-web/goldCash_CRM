@@ -107,8 +107,11 @@
   </div>
 
   <div class="crm-app-layout app-container" style="display: none;">
+    <!-- Mobile Sidebar Backdrop Overlay -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
     <!-- 1. LEFT NAVIGATION SIDEBAR -->
-    <aside class="nav-sidebar">
+    <aside class="nav-sidebar" id="navSidebar">
       <div class="nav-brand-header">
         <div class="brand-logo-card">
           <div class="brand-logo-glow"></div>
@@ -118,6 +121,7 @@
           <h2 class="brand-name">Gold Cash</h2>
           <span class="brand-tagline">CRM Panel</span>
         </div>
+        <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close sidebar navigation">&times;</button>
       </div>
 
       <div class="nav-menu-group">
@@ -198,21 +202,19 @@
         <div class="leads-dashboard-container">
           <!-- Leads View Top Header -->
           <div class="view-header">
-            <div class="header-title-wrap">
-              <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-users" style="color: var(--crm-primary);"></i> Leads
-              </h2>
-            </div>
-            <div class="header-actions" style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
-              <button type="button" class="btn-primary" id="openAddLeadModalBtn" style="padding: 8px 16px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 8px;">
-                <i class="fa-solid fa-plus"></i> Add Lead
+            <div class="header-left-group">
+              <button type="button" class="btn-mobile-menu-toggle" id="leadsMenuToggleBtn" aria-label="Open sidebar menu">
+                <i class="fa-solid fa-bars"></i>
               </button>
-              <div class="search-input-wrap">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="leadsSearchInput" placeholder="Search leads by name, phone or message...">
+              <div class="header-title-wrap">
+                <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-users" style="color: var(--crm-primary);"></i> Leads
+                </h2>
               </div>
+            </div>
 
-              <!-- Header Notification Bell Wrap -->
+            <div class="header-actions">
+              <!-- 1. Header Notification Bell Wrap -->
               <div class="header-notification-wrap" id="headerNotificationWrap">
                 <button type="button" class="header-notification-btn" id="headerNotificationBtn" title="Notifications">
                   <i class="fa-regular fa-bell"></i>
@@ -239,6 +241,17 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 2. Search Input -->
+              <div class="search-input-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="leadsSearchInput" placeholder="Search leads by name, phone or message...">
+              </div>
+
+              <!-- 3. Add Lead Button -->
+              <button type="button" class="btn-primary btn-add-lead-top" id="openAddLeadModalBtn">
+                <i class="fa-solid fa-plus"></i> <span>Add Lead</span>
+              </button>
             </div>
           </div>
 
@@ -543,6 +556,9 @@
         <aside class="conversations-pane">
           <div class="conv-header">
             <div class="conv-title-row">
+              <button type="button" class="btn-mobile-menu-toggle conv-mobile-menu-btn" id="convMenuToggleBtn" aria-label="Open sidebar menu">
+                <i class="fa-solid fa-bars"></i>
+              </button>
               <h2>Team inbox</h2>
               <span class="conv-dropdown-icon"><i class="fa-solid fa-chevron-down"></i></span>
             </div>
@@ -829,11 +845,16 @@
         <div class="leads-dashboard-container">
           <!-- View Header -->
           <div class="view-header">
-            <div class="header-title-wrap">
-              <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-clock-rotate-left" style="color: var(--crm-primary);"></i> Activity & Action Logs
-              </h2>
-              <span class="header-subtitle" style="font-size: 12px; color: var(--text-muted);">Audit log tracking lead status changes, deletions, message sending, and assignee updates</span>
+            <div class="header-left-group">
+              <button type="button" class="btn-mobile-menu-toggle" id="logsMenuToggleBtn" aria-label="Open sidebar menu">
+                <i class="fa-solid fa-bars"></i>
+              </button>
+              <div class="header-title-wrap">
+                <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-clock-rotate-left" style="color: var(--crm-primary);"></i> Activity & Action Logs
+                </h2>
+                <span class="header-subtitle" style="font-size: 12px; color: var(--text-muted);">Audit log tracking lead status changes, deletions, message sending, and assignee updates</span>
+              </div>
             </div>
             <div class="header-actions" style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
               <div class="search-input-wrap">
@@ -892,11 +913,16 @@
         <div class="team-dashboard-container" style="padding: 24px 32px; width: 100%; height: 100%; flex: 1; overflow-y: auto; background-color: #f8fafc;">
           <!-- Header -->
           <div class="view-header" style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
-            <div class="header-title-wrap">
-              <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-users-gear" style="color: var(--crm-primary);"></i> Team & Sub-Users Management
-              </h2>
-              <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Manage team members, roles (Super Admin, Sub Admin, Maker), and user access controls.</p>
+            <div class="header-left-group">
+              <button type="button" class="btn-mobile-menu-toggle" id="teamMenuToggleBtn" aria-label="Open sidebar menu">
+                <i class="fa-solid fa-bars"></i>
+              </button>
+              <div class="header-title-wrap">
+                <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-users-gear" style="color: var(--crm-primary);"></i> Team & Sub-Users Management
+                </h2>
+                <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Manage team members, roles (Super Admin, Sub Admin, Maker), and user access controls.</p>
+              </div>
             </div>
             <button type="button" class="header-notification-btn" title="Notifications">
               <i class="fa-regular fa-bell"></i>
@@ -961,11 +987,16 @@
         <div class="settings-dashboard-container" style="padding: 24px 32px; width: 100%; height: 100%; flex: 1; overflow-y: auto; background-color: #f8fafc;">
           <!-- View Header -->
           <div class="view-header" style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
-            <div class="header-title-wrap">
-              <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-key" style="color: var(--crm-primary);"></i> Change Password
-              </h2>
-              <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Update your account password and review security status.</p>
+            <div class="header-left-group">
+              <button type="button" class="btn-mobile-menu-toggle" id="settingsMenuToggleBtn" aria-label="Open sidebar menu">
+                <i class="fa-solid fa-bars"></i>
+              </button>
+              <div class="header-title-wrap">
+                <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-key" style="color: var(--crm-primary);"></i> Change Password
+                </h2>
+                <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Update your account password and review security status.</p>
+              </div>
             </div>
             <button type="button" class="header-notification-btn" title="Notifications">
               <i class="fa-regular fa-bell"></i>

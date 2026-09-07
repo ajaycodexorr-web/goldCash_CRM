@@ -7,11 +7,62 @@ import { elements } from '../dom/elements.js';
 import { hasPermission } from '../services/user-service.js';
 import { renderPermissionsTab } from './settings-view.js';
 
+export function openMobileSidebar() {
+  if (elements.navSidebar) elements.navSidebar.classList.add('mobile-open');
+  if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.add('active');
+  document.body.classList.add('sidebar-drawer-open');
+}
+
+export function closeMobileSidebar() {
+  if (elements.navSidebar) elements.navSidebar.classList.remove('mobile-open');
+  if (elements.sidebarBackdrop) elements.sidebarBackdrop.classList.remove('active');
+  document.body.classList.remove('sidebar-drawer-open');
+}
+
+export function toggleMobileSidebar() {
+  if (elements.navSidebar && elements.navSidebar.classList.contains('mobile-open')) {
+    closeMobileSidebar();
+  } else {
+    openMobileSidebar();
+  }
+}
+
 export function setupNavigation(renderLeadsView, renderConversationsView, renderLogsView, renderTeamList, renderSettingsView) {
   const closeSettingsSubmenu = () => {
     const groupWrapper = document.getElementById('navSettingsGroupWrapper');
     if (groupWrapper) groupWrapper.classList.remove('open');
   };
+
+  // Mobile Menu Hamburger Toggle Buttons
+  document.querySelectorAll('.btn-mobile-menu-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMobileSidebar();
+    });
+  });
+
+  // Mobile Sidebar Close Button
+  if (elements.sidebarCloseBtn) {
+    elements.sidebarCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeMobileSidebar();
+    });
+  }
+
+  // Mobile Sidebar Backdrop Click
+  if (elements.sidebarBackdrop) {
+    elements.sidebarBackdrop.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeMobileSidebar();
+    });
+  }
+
+  // ESC key to close mobile drawer
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeMobileSidebar();
+    }
+  });
 
   if (elements.navItemLeads) {
     elements.navItemLeads.addEventListener('click', () => {
@@ -126,6 +177,7 @@ export function switchView(viewName, renderLeadsView, renderConversationsView, r
   }
 
   state.activeView = targetView;
+  closeMobileSidebar();
 
   const isSettingsGroup = targetView === 'password' || targetView === 'permissions';
 

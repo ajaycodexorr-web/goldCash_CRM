@@ -103,6 +103,79 @@ html, body {
   padding: 10px 8px 18px 8px;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 16px;
+  position: relative;
+}
+
+/* Mobile Menu Toggle Button (Visible on mobile/tablet) */
+.btn-mobile-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background-color: #ffffff;
+  color: var(--text-main);
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.btn-mobile-menu-toggle:hover {
+  background-color: #faf6f0;
+  border-color: var(--crm-primary);
+  color: var(--crm-primary);
+}
+
+/* Sidebar Close Button (inside drawer) */
+.sidebar-close-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  margin-left: auto;
+  transition: all 0.15s ease;
+}
+
+.sidebar-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* Mobile Sidebar Backdrop Overlay */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 998;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.sidebar-backdrop.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.header-left-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 /* Premium Decorated Logo Card */
@@ -929,6 +1002,19 @@ html, body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  gap: 16px;
+}
+
+.view-header-main-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-left-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .header-titles h1 {
@@ -947,7 +1033,8 @@ html, body {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  margin-left: auto;
 }
 
 .search-input-wrap {
@@ -3804,7 +3891,14 @@ html, body {
   margin-top: 18px;
 }
 
-.btn-primary {
+.btn-primary,
+#openAddLeadModalBtn,
+.btn-add-lead-top {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  text-align: center !important;
   padding: 8px 16px;
   border-radius: 8px;
   border: none;
@@ -3812,6 +3906,8 @@ html, body {
   color: #ffffff;
   font-weight: 600;
   cursor: pointer;
+  line-height: 1;
+  box-sizing: border-box;
 }
 
 .btn-secondary {
@@ -6508,22 +6604,507 @@ html, body {
   transform: translateY(-1px);
 }
 
-@media (max-width: 768px) {
-  .date-range-picker-popover {
-    width: 95vw;
-    right: 0;
+/* ==========================================================================
+   RESPONSIVE MEDIA QUERIES (Mobile, Tablet, Desktop)
+   ========================================================================== */
+
+/* 1. TABLET BREAKPOINT (< 1024px): Off-Canvas Sidebar Drawer */
+@media (max-width: 1023px) {
+  .crm-app-layout {
+    position: relative;
   }
+
+  .btn-mobile-menu-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar-close-btn {
+    display: inline-flex;
+  }
+
+  .nav-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 270px;
+    max-width: 82vw;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: none;
+  }
+
+  .nav-sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 10px 0 36px rgba(0, 0, 0, 0.45);
+  }
+
+  body.sidebar-drawer-open {
+    overflow: hidden;
+  }
+
+  .app-main-content {
+    width: 100%;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .leads-dashboard-container {
+    padding: 16px 20px;
+  }
+}
+
+/* 2. TABLET SCREENS (481px to 1023px): Add Lead Button width 100px and aligned to right */
+@media (min-width: 481px) and (max-width: 1023px) {
+  .view-header {
+    position: relative;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .header-left-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 38px;
+  }
+
+  .header-left-group h2 {
+    font-size: 17px !important;
+  }
+
+  .header-notification-wrap {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 50;
+  }
+
+  .header-notification-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+  }
+
+  .header-actions {
+    width: 100%;
+    margin-left: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .btn-add-lead-top {
+    order: 1;
+    width: 100px !important;
+    min-width: 100px !important;
+    max-width: 100px !important;
+    align-self: flex-end !important;
+    margin-left: auto !important;
+    padding: 0 6px !important;
+    font-size: 12px !important;
+    height: 38px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .search-input-wrap {
+    order: 2;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .search-input-wrap input {
+    width: 100% !important;
+    height: 38px !important;
+    font-size: 13px !important;
+    padding-left: 34px !important;
+  }
+
+  .search-input-wrap i {
+    font-size: 13px !important;
+    left: 12px !important;
+  }
+}
+
+/* 3. GENERAL VIEWPORT ADAPTATIONS (< 768px) */
+@media (max-width: 768px) {
+  .leads-dashboard-container {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  /* View Header */
+  .view-header {
+    position: relative;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .header-left-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 38px;
+  }
+
+  .header-left-group h2 {
+    font-size: 17px !important;
+  }
+
+  .header-notification-wrap {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 50;
+  }
+
+  .header-notification-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+  }
+
+  .header-actions {
+    width: 100%;
+    margin-left: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .btn-add-lead-top {
+    order: 1;
+  }
+
+  .search-input-wrap {
+    order: 2;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .search-input-wrap input {
+    width: 100% !important;
+    height: 38px !important;
+    font-size: 13px !important;
+    padding-left: 34px !important;
+  }
+
+  .search-input-wrap i {
+    font-size: 13px !important;
+    left: 12px !important;
+  }
+
+  /* Filter Bar Responsiveness */
+  .leads-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .leads-filter-right-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .lead-filter-pill {
+    height: 32px;
+    padding: 4px 12px;
+    font-size: 11.5px;
+    gap: 5px;
+  }
+
+  .lead-date-filter-wrapper {
+    flex: 1 1 140px;
+    min-width: 130px;
+  }
+
+  .lead-date-picker-btn {
+    width: 100%;
+    height: 32px;
+    font-size: 11.5px;
+    padding: 4px 10px;
+    justify-content: space-between;
+  }
+
+  .btn-export-excel {
+    flex: 1 1 120px;
+    min-width: 110px;
+    height: 32px;
+    font-size: 11.5px;
+    padding: 4px 10px;
+    justify-content: center;
+  }
+
+  /* Dropdown Popovers on Mobile */
+  .lead-status-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: -36px;
+    right: auto;
+    width: 195px;
+    max-width: 86vw;
+    z-index: 120;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  }
+
+  .lead-branch-filter-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    left: auto;
+    max-width: min(250px, 88vw);
+    width: 240px;
+    z-index: 120;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  }
+
+  /* Date Range Picker Popover Modal Mode on Mobile */
+  .date-range-picker-popover {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 94vw !important;
+    max-width: 440px !important;
+    max-height: 88vh !important;
+    overflow-y: auto !important;
+    z-index: 1100 !important;
+    border-radius: 14px;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+    box-sizing: border-box;
+  }
+
   .drp-body {
     flex-direction: column;
   }
+
   .drp-presets-sidebar {
     width: 100%;
-    max-height: 120px;
+    max-height: 110px;
     border-right: none;
     border-bottom: 1px solid #f1f5f9;
+    overflow-y: auto;
   }
+
   .drp-dual-calendars {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .drp-calendar-month.right {
+    display: none;
+  }
+
+  .drp-month-titles #drpMonthTitleRight {
+    display: none;
+  }
+
+  .drp-range-inputs-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .drp-date-input-wrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .drp-date-input-wrap label {
+    font-size: 10px;
+  }
+
+  .drp-date-input-wrap input {
+    font-size: 11.5px;
+    padding: 6px 8px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .drp-input-separator {
+    margin-top: 14px;
+    font-size: 12px;
+  }
+
+  .drp-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+    background-color: #faf6f0;
+  }
+
+  .drp-footer-left {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .btn-drp-clear {
+    padding: 6px 10px;
+    font-size: 11.5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .drp-helper-text {
+    font-size: 11px;
+    color: #78716c;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .drp-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .btn-drp-cancel {
+    flex: 1;
+    height: 36px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .btn-drp-apply {
+    flex: 1;
+    height: 36px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Table Container */
+  .leads-table-container {
+    border-radius: 10px;
+  }
+
+  /* Pagination Bar */
+  .leads-pagination {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .pagination-info {
+    font-size: 11.5px;
+    text-align: center;
+  }
+
+  .pagination-controls {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .btn-page-step,
+  .page-number-btn {
+    height: 30px;
+    font-size: 11.5px;
+    padding: 0 8px;
+  }
+
+  /* Modals on Mobile */
+  .modal-card {
+    width: 94vw !important;
+    max-width: 480px !important;
+    max-height: 90vh !important;
+    border-radius: 12px !important;
+  }
+
+  .lead-notes-modal-card {
+    width: 94vw !important;
+    max-width: 480px !important;
+  }
+}
+
+/* 3. SMALL PHONES (< 480px) */
+@media (max-width: 480px) {
+  .leads-dashboard-container {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .view-header-main-row {
+    width: 100%;
+  }
+
+  .header-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .btn-add-lead-top {
+    width: 100% !important;
+    height: 38px !important;
+    font-size: 13px !important;
+  }
+
+  .search-input-wrap {
+    width: 100% !important;
+  }
+
+  .leads-filter-right-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lead-date-filter-wrapper,
+  .btn-export-excel {
+    width: 100%;
+    flex: none;
+  }
+
+  .lead-filter-pill {
+    font-size: 11px;
+    padding: 3px 9px;
   }
 }
 
