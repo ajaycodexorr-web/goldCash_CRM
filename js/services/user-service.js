@@ -91,7 +91,7 @@ export const DEFAULT_PERMISSIONS = Object.fromEntries(
 );
 
 // ==========================================================================
-// Default Users Catalog (3 Core Users)
+// Default Users Catalog (Super Admin Only)
 // ==========================================================================
 export const DEFAULT_TEAM_MEMBERS = [
   {
@@ -100,24 +100,6 @@ export const DEFAULT_TEAM_MEMBERS = [
     email: "admin@goldcash.com",
     password: "admin123",
     role: "super_admin",
-    status: "active",
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: "usr_subadmin_demo",
-    name: "Sub Admin",
-    email: "subadmin@goldcash.com",
-    password: "123",
-    role: "sub_admin",
-    status: "active",
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: "usr_maker_demo",
-    name: "Maker Agent",
-    email: "maker@goldcash.com",
-    password: "123",
-    role: "maker",
     status: "active",
     createdAt: new Date().toISOString()
   }
@@ -275,7 +257,8 @@ export function loadTeamMembers() {
   try {
     const saved = localStorage.getItem('crm_team_members_v3');
     if (saved) {
-      state.teamMembers = JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      state.teamMembers = parsed.filter(u => u.id !== 'usr_subadmin_demo' && u.id !== 'usr_maker_demo');
     } else {
       state.teamMembers = JSON.parse(JSON.stringify(DEFAULT_TEAM_MEMBERS));
       saveTeamMembers();
