@@ -6734,6 +6734,7 @@ html, body {
     align-items: center;
     gap: 10px;
     min-height: 38px;
+    padding-right: 50px;
   }
 
   .header-left-group h2 {
@@ -6859,23 +6860,35 @@ html, body {
     align-items: center;
     gap: 10px;
     min-height: 38px;
+    padding-right: 48px;
+    width: 100%;
   }
 
   .header-left-group h2 {
     font-size: 17px !important;
   }
 
+  .header-left-group .header-subtitle,
+  .header-left-group p {
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
+    display: block !important;
+    margin-top: 2px !important;
+  }
+
   .header-notification-wrap {
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 50;
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    z-index: 50 !important;
+    margin: 0 !important;
+    align-self: auto !important;
   }
 
   .header-notification-btn {
-    width: 38px;
-    height: 38px;
-    border-radius: 8px;
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 8px !important;
   }
 
   .header-actions {
@@ -6885,14 +6898,15 @@ html, body {
     flex-direction: column;
     gap: 8px;
     align-items: stretch;
+    margin-top: 0;
   }
 
   .btn-add-lead-top {
-    order: 1;
+    order: 1 !important;
   }
 
   .search-input-wrap {
-    order: 2;
+    order: 2 !important;
     width: 100% !important;
     min-width: 0 !important;
   }
