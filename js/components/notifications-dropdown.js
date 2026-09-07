@@ -114,10 +114,11 @@ function openNotificationDropdown(triggerBtn) {
   const dropdown = document.getElementById('headerNotificationDropdown');
   if (!dropdown) return;
 
-  // Reposition dropdown relative to trigger button's container
+  // Reposition dropdown inside trigger button's container if not already attached
   if (triggerBtn && triggerBtn.parentElement) {
-    triggerBtn.parentElement.style.position = 'relative';
-    triggerBtn.parentElement.appendChild(dropdown);
+    if (!triggerBtn.parentElement.contains(dropdown)) {
+      triggerBtn.parentElement.appendChild(dropdown);
+    }
   }
 
   dropdown.style.display = 'flex';

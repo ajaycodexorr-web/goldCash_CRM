@@ -6208,7 +6208,8 @@ html, body {
   top: calc(100% + 8px);
   right: 0;
   width: 360px;
-  max-width: 90vw;
+  max-width: min(360px, calc(100vw - 20px));
+  box-sizing: border-box;
   background: #ffffff;
   border-radius: 12px;
   border: 1px solid var(--border-color);
@@ -7110,6 +7111,13 @@ html, body {
     top: 0;
     right: 0;
     z-index: 50;
+  }
+
+  .header-notification-dropdown {
+    right: 0;
+    width: min(340px, calc(100vw - 20px));
+    max-width: calc(100vw - 20px);
+    box-sizing: border-box;
   }
 
   .header-notification-btn {
@@ -8026,6 +8034,33 @@ html, body {
     width: 100% !important;
     height: 38px !important;
     font-size: 13px !important;
+  }
+
+  .header-notification-dropdown {
+    position: fixed !important;
+    top: 56px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: calc(100vw - 16px) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22) !important;
+    z-index: 999999 !important;
+    transform-origin: top right !important;
+    box-sizing: border-box !important;
+  }
+
+  .notif-items-list {
+    max-height: min(340px, 60vh) !important;
+  }
+
+  .notif-dropdown-header {
+    padding: 10px 14px !important;
+  }
+
+  .notif-item {
+    padding: 10px 14px !important;
+    gap: 10px !important;
   }
 
   .search-input-wrap {
