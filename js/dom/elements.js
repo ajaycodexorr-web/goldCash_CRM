@@ -240,6 +240,8 @@ export const elements = {
   contactDetailsPane: document.getElementById('contactDetailsPane'),
   toggleContactDetailsBtn: document.getElementById('toggleContactDetailsBtn'),
   closeContactDetailsBtn: document.getElementById('closeContactDetailsBtn'),
+  contactDetailsCloseBtn: document.getElementById('contactDetailsCloseBtn'),
+  chatMobileBackBtn: document.getElementById('chatMobileBackBtn'),
   contactDetailsAvatar: document.getElementById('contactDetailsAvatar'),
   contactDetailsPhone: document.getElementById('contactDetailsPhone'),
   contactDetailsName: document.getElementById('contactDetailsName'),

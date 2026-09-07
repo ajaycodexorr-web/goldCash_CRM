@@ -609,6 +609,11 @@
 
             <!-- Header -->
             <div class="chat-header">
+              <!-- Mobile Back Button -->
+              <button type="button" class="btn-chat-mobile-back" id="chatMobileBackBtn" aria-label="Back to conversations list" title="Back to conversations">
+                <i class="fa-solid fa-arrow-left"></i>
+              </button>
+
               <!-- Avatar with user initials -->
               <div class="chat-avatar-wrap">
                 <div class="chat-contact-avatar" id="chatContactAvatar">ML</div>
@@ -639,6 +644,9 @@
                 </button>
                 <button id="deleteLeadBtn" class="icon-action-btn delete" title="Delete conversation & lead">
                   <i class="fa-regular fa-trash-can"></i>
+                </button>
+                <button id="toggleContactDetailsBtn" class="icon-action-btn toggle-details-btn" title="View contact details">
+                  <i class="fa-solid fa-circle-info"></i>
                 </button>
               </div>
             </div>
@@ -746,6 +754,7 @@
           <!-- Panel Header -->
           <div class="contact-details-header">
             <h3>Details</h3>
+            <button type="button" class="contact-details-close-btn" id="contactDetailsCloseBtn" aria-label="Close details" title="Close details">&times;</button>
           </div>
 
           <div class="contact-details-scrollable">

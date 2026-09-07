@@ -85,13 +85,24 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
   }
 
 
-  // Toggle Contact Details Sidebar
+  // Toggle Contact Details Sidebar / Drawer
   if (elements.toggleContactDetailsBtn) {
     elements.toggleContactDetailsBtn.addEventListener('click', () => {
       if (!elements.contactDetailsPane) return;
-      const isVisible = elements.contactDetailsPane.style.display !== 'none';
-      elements.contactDetailsPane.style.display = isVisible ? 'none' : 'flex';
-      elements.toggleContactDetailsBtn.classList.toggle('active', !isVisible);
+      const isVisible = elements.contactDetailsPane.style.display === 'flex' || elements.contactDetailsPane.classList.contains('mobile-open');
+      if (isVisible) {
+        elements.contactDetailsPane.style.display = 'none';
+        elements.contactDetailsPane.classList.remove('mobile-open');
+        elements.toggleContactDetailsBtn.classList.remove('active');
+      } else {
+        elements.contactDetailsPane.style.display = 'flex';
+        elements.contactDetailsPane.classList.add('mobile-open');
+        elements.toggleContactDetailsBtn.classList.add('active');
+        if (state.activeLeadId) {
+          const lead = state.leads.find(l => l.id === state.activeLeadId);
+          if (lead) renderContactDetailsPanel(lead);
+        }
+      }
     });
   }
 
@@ -99,6 +110,28 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
     elements.closeContactDetailsBtn.addEventListener('click', () => {
       if (elements.contactDetailsPane) elements.contactDetailsPane.style.display = 'none';
       if (elements.toggleContactDetailsBtn) elements.toggleContactDetailsBtn.classList.remove('active');
+    });
+  }
+
+  if (elements.contactDetailsCloseBtn) {
+    elements.contactDetailsCloseBtn.addEventListener('click', () => {
+      if (elements.contactDetailsPane) {
+        elements.contactDetailsPane.style.display = 'none';
+        elements.contactDetailsPane.classList.remove('mobile-open');
+      }
+      if (elements.toggleContactDetailsBtn) elements.toggleContactDetailsBtn.classList.remove('active');
+    });
+  }
+
+  if (elements.chatMobileBackBtn) {
+    elements.chatMobileBackBtn.addEventListener('click', () => {
+      state.activeLeadId = null;
+      const convSection = document.getElementById('conversationsViewSection');
+      if (convSection) convSection.classList.remove('mobile-chat-active');
+      if (elements.activeChatView) elements.activeChatView.style.display = 'none';
+      if (elements.chatPlaceholder) elements.chatPlaceholder.style.display = 'flex';
+      if (elements.contactDetailsPane) elements.contactDetailsPane.style.display = 'none';
+      renderConversationsView();
     });
   }
 
@@ -446,9 +479,21 @@ export function selectLead(leadId, renderLeadsView) {
   renderConversationsView();
   updateActiveChatHeader(lead);
 
+  const convSection = document.getElementById('conversationsViewSection');
+  if (convSection) convSection.classList.add('mobile-chat-active');
+
   if (elements.chatPlaceholder) elements.chatPlaceholder.style.display = 'none';
   if (elements.activeChatView) elements.activeChatView.style.display = 'flex';
-  if (elements.contactDetailsPane) elements.contactDetailsPane.style.display = 'flex';
+
+  // Only show contact details pane by default on Laptop L and above (>= 1440px)
+  const isLaptopL = window.innerWidth >= 1440;
+  if (elements.contactDetailsPane) {
+    elements.contactDetailsPane.style.display = isLaptopL ? 'flex' : 'none';
+    elements.contactDetailsPane.classList.remove('mobile-open');
+  }
+  if (elements.toggleContactDetailsBtn) {
+    elements.toggleContactDetailsBtn.classList.toggle('active', isLaptopL);
+  }
   if (elements.chatErrorBanner) elements.chatErrorBanner.style.display = 'none';
 
   clearAllStagedAttachments();
