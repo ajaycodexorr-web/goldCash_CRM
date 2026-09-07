@@ -6731,10 +6731,16 @@ html, body {
 
   .header-left-group {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     min-height: 38px;
     padding-right: 50px;
+  }
+
+  .header-left-group .header-title-wrap {
+    flex: 1;
+    min-width: 0;
+    padding-top: 4px;
   }
 
   .header-left-group h2 {
@@ -6857,11 +6863,17 @@ html, body {
 
   .header-left-group {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     min-height: 38px;
     padding-right: 48px;
     width: 100%;
+  }
+
+  .header-left-group .header-title-wrap {
+    flex: 1;
+    min-width: 0;
+    padding-top: 4px;
   }
 
   .header-left-group h2 {
