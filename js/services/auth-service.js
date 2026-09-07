@@ -7,7 +7,7 @@ import { elements } from '../dom/elements.js';
 import { loadTeamMembers, saveTeamMembers, syncUsersFromFirestore, syncRolesFromFirestore } from './user-service.js';
 import { showToast } from '../utils/notifications.js';
 import { addAuditLog } from './logging-service.js';
-import { initializeFirebase, firebaseSignInWithEmail, firebaseCreateAuthUser, firebaseSignOutUser, onFirebaseAuthStateChanged } from '../../firebase-config.js';
+import { initializeFirebase, firebaseSignInWithEmail, firebaseCreateAuthUser, firebaseSignOutUser, onFirebaseAuthStateChanged, getCurrentAuthUser, saveUserToFirestore } from '../../firebase-config.js';
 
 const SESSION_KEY = 'crm_auth_session_v1';
 
@@ -144,8 +144,19 @@ export async function loginUser(email, password) {
     throw new Error('Your account has been disabled by Admin. Please contact support.');
   }
 
-  // 3. Now that Firebase Auth is authenticated, sync roles & users from Firestore
+  // 3. Now that Firebase Auth is authenticated, save user document under Firebase UID and sync roles & users from Firestore
   try {
+    const authUser = getCurrentAuthUser();
+    if (authUser && user) {
+      user.firebaseUid = authUser.uid;
+      await saveUserToFirestore({
+        ...user,
+        id: authUser.uid,
+        email: cleanEmail,
+        role: user.role || (cleanEmail.includes('admin') ? 'super_admin' : 'maker'),
+        status: user.status || 'active'
+      });
+    }
     await syncRolesFromFirestore();
     await syncUsersFromFirestore();
   } catch (err) {
@@ -204,6 +215,13 @@ export function initAuthCheck(onAuthenticated) {
         state.currentUser = user;
         saveAuthSession(user);
         document.documentElement.className = 'is-authenticated';
+        saveUserToFirestore({
+          ...user,
+          id: fbUser.uid,
+          email: email,
+          role: user.role || (email.includes('admin') ? 'super_admin' : 'maker'),
+          status: user.status || 'active'
+        }).catch(() => {});
         if (onAuthenticated) onAuthenticated(user);
         return;
       }

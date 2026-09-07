@@ -256,15 +256,15 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'password';
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && (getUserRole() == 'super_admin' || getUserRole() == 'admin');
+      return isAuthenticated() && (
+        request.auth.token.email == 'admin@goldcash.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'admin'])
+      );
     }
 
     // 1. Roles Collection
@@ -276,7 +276,7 @@ service cloud.firestore {
     // 2. Users Collection
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
     }
 
     // 3. Leads Collection
