@@ -205,23 +205,23 @@ export function renderTeamList(onTeamUpdated) {
 
     return `
       <div class="team-user-row">
-        <div class="team-user-profile">
-          <div class="user-avatar-initials ${user.role === 'maker' || user.role === 'agent' ? 'agent-avatar' : ''}">${escapeHtml(initials)}</div>
-          <div class="team-user-names">
-            <strong>${escapeHtml(user.name)} ${isCurrent ? '<span class="you-badge">(You)</span>' : ''}</strong>
-            <span>${escapeHtml(user.email)}</span>
+        <div class="team-user-main-info">
+          <div class="team-user-profile">
+            <div class="user-avatar-initials ${user.role === 'maker' || user.role === 'agent' ? 'agent-avatar' : ''}">${escapeHtml(initials)}</div>
+            <div class="team-user-names">
+              <strong>${escapeHtml(user.name)} ${isCurrent ? '<span class="you-badge">(You)</span>' : ''}</strong>
+              <span>${escapeHtml(user.email)}</span>
+            </div>
+          </div>
+          <div class="team-user-badges">
+            <span class="user-role-badge ${user.role}">${roleLabel}</span>
+            <span class="status-pill ${statusClass}">${user.status === 'active' ? '● Active' : '○ Disabled'}</span>
           </div>
         </div>
-        <div class="team-user-role">
-          <span class="user-role-badge ${user.role}">${roleLabel}</span>
-        </div>
-        <div class="team-user-status">
-          <span class="status-pill ${statusClass}">${user.status === 'active' ? '● Active' : '○ Disabled'}</span>
-        </div>
-        <div class="team-user-actions" style="display: flex; gap: 12px; align-items: center;">
+        <div class="team-user-actions">
           ${canResetThisPassword ? `
-            <button type="button" class="btn-reset-password" data-user-id="${user.id}" title="Reset User Password" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-size: 12px; font-weight: 600; cursor: pointer;">
-              <i class="fa-solid fa-key" style="color: #64748b;"></i> Reset Password
+            <button type="button" class="btn-reset-password" data-user-id="${user.id}" title="Reset User Password">
+              <i class="fa-solid fa-key"></i> <span>Reset Password</span>
             </button>
           ` : ''}
           ${isProtected ? '<span class="admin-lock"><i class="fa-solid fa-lock"></i> Protected</span>' : `

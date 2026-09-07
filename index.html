@@ -921,7 +921,7 @@
 
       <!-- VIEW 4: DEDICATED TEAM MANAGEMENT PAGE -->
       <section class="view-section" id="teamViewSection" style="display: none;">
-        <div class="team-dashboard-container" style="padding: 24px 32px; width: 100%; height: 100%; flex: 1; overflow-y: auto; background-color: #f8fafc;">
+        <div class="team-dashboard-container">
           <!-- Header -->
           <div class="view-header">
             <div class="header-left-group">
@@ -932,7 +932,7 @@
                 <h2 style="font-size: 18px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
                   <i class="fa-solid fa-users-gear" style="color: var(--crm-primary);"></i> Team & Sub-Users Management
                 </h2>
-                <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Manage team members, roles (Super Admin, Sub Admin, Maker), and user access controls.</p>
+                <p class="header-subtitle" style="color: #64748b; font-size: 13px; margin-top: 4px;">Manage team members, roles (Super Admin, Sub Admin, Maker), and user access controls.</p>
               </div>
             </div>
             <div class="header-actions">
@@ -946,37 +946,37 @@
           </div>
 
           <!-- Add User Card -->
-          <div class="team-card" style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
-            <h3 style="font-size: 15px; font-weight: 700; color: var(--text-main); margin-bottom: 16px;">Add New Team Member</h3>
+          <div class="team-card add-user-card">
+            <h3 class="team-card-title">Add New Team Member</h3>
             <form id="addTeamMemberForm" class="team-add-form" autocomplete="off">
-              <div class="form-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
+              <div class="team-form-grid">
                 <div class="form-group">
-                  <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">Full Name</label>
-                  <input type="text" id="newMemberName" placeholder="e.g. Rahul Sharma" autocomplete="off" required style="width: 100%; height: 38px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 13px;">
+                  <label>Full Name</label>
+                  <input type="text" id="newMemberName" placeholder="e.g. Rahul Sharma" autocomplete="off" required>
                 </div>
                 <div class="form-group">
-                  <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">Email Address</label>
-                  <input type="email" id="newMemberEmail" placeholder="rahul@company.com" autocomplete="new-email" required style="width: 100%; height: 38px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 13px;">
+                  <label>Email Address</label>
+                  <input type="email" id="newMemberEmail" placeholder="rahul@company.com" autocomplete="new-email" required>
                 </div>
                 <div class="form-group">
-                  <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">Password</label>
-                  <div class="input-with-icon" style="position: relative;">
-                    <input type="password" id="newMemberPassword" placeholder="e.g. rahul123" autocomplete="new-password" required style="width: 100%; height: 38px; padding: 8px 36px 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 13px;">
-                    <button type="button" class="btn-toggle-password" id="toggleNewMemberPasswordBtn" title="Toggle password visibility" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #64748b; padding: 4px;">
+                  <label>Password</label>
+                  <div class="input-with-icon">
+                    <input type="password" id="newMemberPassword" placeholder="e.g. rahul123" autocomplete="new-password" required>
+                    <button type="button" class="btn-toggle-password" id="toggleNewMemberPasswordBtn" title="Toggle password visibility">
                       <i class="fa-solid fa-eye"></i>
                     </button>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">Role</label>
-                  <select id="newMemberRole" class="custom-form-select" style="width: 100%; height: 38px;">
+                  <label>Role</label>
+                  <select id="newMemberRole" class="custom-form-select">
                     <option value="maker">Maker</option>
                     <option value="sub_admin">Sub Admin</option>
                   </select>
                 </div>
               </div>
-              <div style="display: flex; justify-content: flex-end;">
-                <button type="submit" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 8px; background: var(--crm-primary); color: #ffffff; font-weight: 600; border: none; cursor: pointer;">
+              <div class="team-form-actions">
+                <button type="submit" class="btn-primary btn-add-user-submit">
                   <i class="fa-solid fa-user-plus"></i> Add User
                 </button>
               </div>
@@ -984,9 +984,9 @@
           </div>
 
           <!-- Members List Card -->
-          <div class="team-card" style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-sm);">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-              <h3 style="font-size: 15px; font-weight: 700; color: var(--text-main); margin: 0;">
+          <div class="team-card team-members-card">
+            <div class="team-card-header">
+              <h3 class="team-card-title">
                 Team Members (<span id="teamMemberCount">0</span>)
               </h3>
             </div>
@@ -999,7 +999,7 @@
 
       <!-- VIEW 5: CHANGE PASSWORD & ACCOUNT SECURITY -->
       <section class="view-section" id="passwordViewSection" style="display: none;">
-        <div class="settings-dashboard-container" style="padding: 24px 32px; width: 100%; height: 100%; flex: 1; overflow-y: auto; background-color: #f8fafc;">
+        <div class="settings-dashboard-container">
           <!-- View Header -->
           <div class="view-header">
             <div class="header-left-group">
@@ -1025,29 +1025,29 @@
 
           <!-- Account & Password Grid -->
           <div id="settingsAccountTabPane" style="display: block;">
-            <div class="settings-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; max-width: 1080px;">
+            <div class="settings-grid">
               
               <!-- User Profile Summary Card -->
-              <div class="settings-card" style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 20px;">
-                <div style="display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 20px;">
-                  <div class="user-avatar-initials" id="settingsProfileAvatar" style="width: 56px; height: 56px; font-size: 20px; font-weight: 700; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #e2e8f0; color: #334155;">SA</div>
-                  <div>
-                    <h3 id="settingsProfileName" style="font-size: 16px; font-weight: 700; color: var(--text-main); margin: 0 0 4px 0; display: none;"></h3>
-                    <div id="settingsProfileEmail" style="font-size: 14px; font-weight: 600; color: var(--text-main); margin-bottom: 6px;">admin@goldcash.com</div>
-                    <span id="settingsProfileRole" class="user-role-badge super_admin" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 700; text-transform: uppercase;">SUPER ADMIN</span>
+              <div class="settings-card settings-profile-card">
+                <div class="settings-profile-header">
+                  <div class="user-avatar-initials settings-avatar" id="settingsProfileAvatar">SA</div>
+                  <div class="settings-profile-meta">
+                    <h3 id="settingsProfileName" style="display: none;"></h3>
+                    <div id="settingsProfileEmail" class="settings-email">admin@goldcash.com</div>
+                    <span id="settingsProfileRole" class="user-role-badge super_admin">SUPER ADMIN</span>
                   </div>
                 </div>
 
-                <div class="settings-info-list" style="display: flex; flex-direction: column; gap: 12px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #64748b; padding: 10px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #f1f5f9;">
+                <div class="settings-info-list">
+                  <div class="settings-info-item">
                     <span><i class="fa-regular fa-circle-check" style="color: #10b981; margin-right: 6px;"></i> Account Status</span>
                     <span id="settingsProfileStatus" style="font-weight: 600; color: #10b981;">Active</span>
                   </div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #64748b; padding: 10px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #f1f5f9;">
+                  <div class="settings-info-item">
                     <span><i class="fa-solid fa-shield-halved" style="color: #6366f1; margin-right: 6px;"></i> Role Access</span>
                     <span id="settingsProfileRoleDesc" style="font-weight: 600; color: var(--text-main);">Full Access</span>
                   </div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #64748b; padding: 10px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #f1f5f9;">
+                  <div class="settings-info-item">
                     <span><i class="fa-regular fa-clock" style="color: #f59e0b; margin-right: 6px;"></i> Current Session</span>
                     <span id="settingsProfileSessionTime" style="font-weight: 600; color: var(--text-main);">Active</span>
                   </div>
@@ -1055,37 +1055,37 @@
               </div>
 
               <!-- Change Password Card -->
-              <div class="settings-card" style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-sm);">
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 16px;">
-                  <div style="width: 36px; height: 36px; border-radius: 8px; background: #fef2f2; color: #ef4444; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+              <div class="settings-card settings-password-card">
+                <div class="settings-password-header">
+                  <div class="settings-lock-icon">
                     <i class="fa-solid fa-lock"></i>
                   </div>
                   <div>
-                    <h3 style="font-size: 16px; font-weight: 700; color: var(--text-main); margin: 0 0 2px 0;">Change Password</h3>
-                    <p style="font-size: 12.5px; color: #64748b; margin: 0;">Update your account password securely</p>
+                    <h3 class="settings-card-heading">Change Password</h3>
+                    <p class="settings-card-subheading">Update your account password securely</p>
                   </div>
                 </div>
 
                 <form id="changePasswordForm" class="settings-password-form" autocomplete="off">
                   <div id="changePasswordAlert" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;"></div>
                   
-                  <div class="form-group" style="margin-bottom: 16px;">
+                  <div class="form-group" style="margin-bottom: 14px;">
                     <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">Current Password *</label>
-                    <input type="password" id="oldPasswordInput" required style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <input type="password" id="oldPasswordInput" required class="settings-input">
                   </div>
 
-                  <div class="form-group" style="margin-bottom: 16px;">
+                  <div class="form-group" style="margin-bottom: 14px;">
                     <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">New Password *</label>
-                    <input type="password" id="newSettingsPasswordInput" required style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <input type="password" id="newSettingsPasswordInput" required class="settings-input">
                   </div>
 
-                  <div class="form-group" style="margin-bottom: 24px;">
+                  <div class="form-group" style="margin-bottom: 18px;">
                     <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">Confirm Password *</label>
-                    <input type="password" id="confirmNewPasswordInput" required style="width: 100%; height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <input type="password" id="confirmNewPasswordInput" required class="settings-input">
                   </div>
 
-                  <div style="display: flex; justify-content: flex-end; gap: 12px;">
-                    <button type="submit" id="submitChangePasswordBtn" class="btn-primary" style="padding: 9px 22px; border-radius: 8px; background: var(--crm-primary); color: #fff; border: none; cursor: pointer;">
+                  <div class="settings-form-actions">
+                    <button type="submit" id="submitChangePasswordBtn" class="btn-primary btn-update-password">
                       Update Password
                     </button>
                   </div>
