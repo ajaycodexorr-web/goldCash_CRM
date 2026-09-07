@@ -39,7 +39,7 @@ export function setupLoginView(onSuccessLogin) {
         if (errorAlert) errorAlert.style.display = 'none';
 
         const authOverlay = document.getElementById('authOverlay');
-        const mainApp = document.querySelector('.app-container');
+        const mainApp = document.querySelector('.crm-app-layout');
 
         if (authOverlay) authOverlay.style.display = 'none';
         if (mainApp) mainApp.style.display = 'flex';

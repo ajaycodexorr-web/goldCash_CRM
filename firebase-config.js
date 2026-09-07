@@ -24,7 +24,10 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js';
 import { 
   getAuth, 
-  signInAnonymously, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  updatePassword,
   onAuthStateChanged 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import {
@@ -128,12 +131,8 @@ export function initializeFirebase(customConfig = null) {
       onAuthStateChanged(auth, (user) => {
         currentUser = user;
         if (user) {
-          console.log("Firebase Auth signed in anonymously:", user.uid);
+          console.log("Firebase Auth active user:", user.email || user.uid);
         }
-      });
-      // Authenticate anonymously so sendWhatsAppMessage callable and Storage have request.auth
-      signInAnonymously(auth).catch((authErr) => {
-        console.warn("Anonymous auth warning (enable Anonymous provider in Firebase Console if callable rejects unauthenticated):", authErr);
       });
     } catch (e) {
       console.warn("Auth initialization error:", e);
@@ -631,13 +630,7 @@ export async function ensureFirebaseAuth() {
   if (!auth) {
     initializeFirebase();
   }
-  if (auth && !auth.currentUser) {
-    try {
-      await signInAnonymously(auth);
-    } catch (e) {
-      console.warn("ensureFirebaseAuth warning:", e);
-    }
-  }
+  return auth && auth.currentUser;
 }
 
 export async function fetchUsersFromFirestore() {
@@ -788,10 +781,8 @@ export async function uploadFileToStorage(file) {
       else return null;
     }
 
-    // Ensure authenticated session before uploading
-    if (auth && !auth.currentUser) {
-      await signInAnonymously(auth).catch(() => {});
-    }
+    // Ensure Firebase app instance is ready
+    if (!storage) return null;
 
     const timestamp = Date.now();
     const safeName = (file.name || 'media_' + timestamp).replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -833,9 +824,6 @@ export async function resolveWhatsAppMediaUrl(mediaId) {
   // 1. Try Firebase Callable getWhatsAppMediaUrl if functions client is connected
   if (functions) {
     try {
-      if (auth && !auth.currentUser) {
-        await signInAnonymously(auth).catch(() => {});
-      }
       const getMediaCallable = httpsCallable(functions, 'getWhatsAppMediaUrl');
       const res = await getMediaCallable({ mediaId });
 
@@ -936,14 +924,6 @@ export async function sendWhatsAppMessage(payload) {
 
   // Approach 2: Call Firebase Callable Cloud Function (Standard)
   if (functions) {
-    // Ensure we are signed in anonymously if auth is ready
-    if (auth && !auth.currentUser) {
-      try {
-        await signInAnonymously(auth);
-      } catch (authErr) {
-        console.warn("Pre-call auth sign-in notice:", authErr);
-      }
-    }
 
     const callable = httpsCallable(functions, functionTarget);
     const result = await callable(requestData);
@@ -1019,5 +999,50 @@ export async function createNewLead(leadData) {
   }
 
   return docPayload;
+}
+
+/**
+ * Firebase Native Authentication Helpers
+ */
+export async function firebaseSignInWithEmail(email, password) {
+  if (!auth) initializeFirebase();
+  if (!auth) throw new Error('Firebase Auth not available');
+  return await signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function firebaseCreateAuthUser(email, password) {
+  if (!auth) initializeFirebase();
+  if (!auth) throw new Error('Firebase Auth not available');
+  return await createUserWithEmailAndPassword(auth, email, password);
+}
+
+export async function firebaseSignOutUser() {
+  if (auth) {
+    try {
+      await signOut(auth);
+    } catch (e) {}
+  }
+}
+
+export async function firebaseChangePassword(newPassword) {
+  if (auth && auth.currentUser) {
+    return await updatePassword(auth.currentUser, newPassword);
+  }
+}
+
+export function getFirebaseAuth() {
+  return auth;
+}
+
+export function getCurrentAuthUser() {
+  return (auth && auth.currentUser) || currentUser;
+}
+
+export function onFirebaseAuthStateChanged(callback) {
+  if (!auth) initializeFirebase();
+  if (auth) {
+    return onAuthStateChanged(auth, callback);
+  }
+  return () => {};
 }
 

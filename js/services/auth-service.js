@@ -7,7 +7,7 @@ import { elements } from '../dom/elements.js';
 import { loadTeamMembers, saveTeamMembers, syncUsersFromFirestore, syncRolesFromFirestore } from './user-service.js';
 import { showToast } from '../utils/notifications.js';
 import { addAuditLog } from './logging-service.js';
-import { initializeFirebase } from '../../firebase-config.js';
+import { initializeFirebase, firebaseSignInWithEmail, firebaseCreateAuthUser, firebaseSignOutUser, onFirebaseAuthStateChanged } from '../../firebase-config.js';
 
 const SESSION_KEY = 'crm_auth_session_v1';
 
@@ -48,16 +48,6 @@ export function clearAuthSession() {
 }
 
 export async function loginUser(email, password) {
-  try {
-    initializeFirebase();
-  } catch (e) {}
-
-  loadTeamMembers();
-  try {
-    await syncRolesFromFirestore();
-    await syncUsersFromFirestore();
-  } catch (err) {}
-
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanPass = (password || '').trim();
 
@@ -65,21 +55,101 @@ export async function loginUser(email, password) {
     throw new Error('Please enter both Email and Password');
   }
 
-  const user = state.teamMembers.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
+  try {
+    initializeFirebase();
+  } catch (e) {}
 
-  if (!user) {
-    throw new Error('Invalid Email or Password');
+  loadTeamMembers();
+
+  // 1. Attempt Native Firebase Authentication FIRST
+  let firebaseAuthSuccess = false;
+  let authError = null;
+
+  try {
+    const cred = await firebaseSignInWithEmail(cleanEmail, cleanPass);
+    if (cred && cred.user) {
+      firebaseAuthSuccess = true;
+    }
+  } catch (fbErr) {
+    authError = fbErr;
+    console.warn("Firebase Native Auth attempt:", fbErr.code || fbErr.message);
   }
 
-  const storedPass = (user.password || '').trim();
-  const isPassValid = !storedPass || storedPass === cleanPass || storedPass.toLowerCase() === cleanPass.toLowerCase();
+  // 2. Check local/Firestore team member profile
+  let user = state.teamMembers.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
 
-  if (!isPassValid) {
-    throw new Error('Invalid Email or Password');
+  // If user authenticated via Firebase but doesn't exist in teamMembers list, auto-create profile
+  if (firebaseAuthSuccess && !user) {
+    user = {
+      id: 'usr_' + Date.now(),
+      name: cleanEmail.split('@')[0],
+      email: cleanEmail,
+      role: cleanEmail.includes('admin') ? 'super_admin' : 'maker',
+      status: 'active'
+    };
+    state.teamMembers.push(user);
+    saveTeamMembers();
   }
 
-  if (user.status === 'disabled') {
+  // Fallback verification if not registered in Firebase Auth yet (during migration / bootstrap)
+  if (!firebaseAuthSuccess) {
+    if (!user) {
+      if (cleanEmail === 'admin@goldcash.com' && cleanPass === 'admin123') {
+        try {
+          await firebaseCreateAuthUser(cleanEmail, cleanPass);
+          firebaseAuthSuccess = true;
+          user = {
+            id: 'usr_admin',
+            name: 'Super Admin',
+            email: cleanEmail,
+            role: 'super_admin',
+            status: 'active'
+          };
+          state.teamMembers.push(user);
+          saveTeamMembers();
+        } catch (createErr) {
+          if (createErr.code === 'auth/email-already-in-use') {
+            throw new Error('Invalid Password for Firebase Account');
+          }
+          throw createErr;
+        }
+      } else {
+        const msg = authError?.code === 'auth/invalid-credential' || authError?.code === 'auth/wrong-password' || authError?.code === 'auth/user-not-found'
+          ? 'Invalid Email or Password'
+          : (authError?.message || 'Invalid Email or Password');
+        throw new Error(msg);
+      }
+    } else {
+      const storedPass = (user.password || '').trim();
+      const isPassValid = !storedPass || storedPass === cleanPass || storedPass.toLowerCase() === cleanPass.toLowerCase();
+
+      if (!isPassValid) {
+        throw new Error('Invalid Email or Password');
+      }
+
+      // Auto-register into Firebase Auth if password matched locally
+      try {
+        await firebaseCreateAuthUser(cleanEmail, cleanPass);
+        console.log(`✅ [Firebase Auth] Auto-registered ${cleanEmail} into Firebase Auth`);
+        firebaseAuthSuccess = true;
+      } catch (createErr) {
+        if (createErr.code === 'auth/email-already-in-use') {
+          throw new Error('Invalid Password for Firebase Account');
+        }
+      }
+    }
+  }
+
+  if (user && user.status === 'disabled') {
     throw new Error('Your account has been disabled by Admin. Please contact support.');
+  }
+
+  // 3. Now that Firebase Auth is authenticated, sync roles & users from Firestore
+  try {
+    await syncRolesFromFirestore();
+    await syncUsersFromFirestore();
+  } catch (err) {
+    console.warn("Post-login Firestore sync note:", err);
   }
 
   // Authentication Success
@@ -96,6 +166,7 @@ export function logoutUser(onLoggedOut) {
     addAuditLog('user_logout', '', state.currentUser.name, `User ${state.currentUser.name} logged out`);
   }
 
+  firebaseSignOutUser();
   clearAuthSession();
   state.currentUser = null;
   document.documentElement.className = 'is-unauthenticated';
@@ -111,22 +182,38 @@ export function initAuthCheck(onAuthenticated) {
   } catch (e) {}
 
   loadTeamMembers();
-  const session = getAuthSession();
 
-  if (session && session.userId) {
-    const user = state.teamMembers.find(u => u.id === session.userId || (u.email && session.email && u.email.toLowerCase() === session.email.toLowerCase()));
-    if (user && user.status !== 'disabled') {
-      state.currentUser = user;
-      document.documentElement.className = 'is-authenticated';
-      if (onAuthenticated) onAuthenticated(user);
-      return true;
+  // Listen to Firebase Auth state
+  onFirebaseAuthStateChanged((fbUser) => {
+    if (fbUser && fbUser.email) {
+      const email = fbUser.email.toLowerCase();
+      let user = state.teamMembers.find(u => (u.email && u.email.toLowerCase() === email));
+      if (!user) {
+        user = {
+          id: fbUser.uid || ('usr_' + Date.now()),
+          name: email.split('@')[0],
+          email: email,
+          role: email.includes('admin') ? 'super_admin' : 'maker',
+          status: 'active'
+        };
+        state.teamMembers.push(user);
+        saveTeamMembers();
+      }
+
+      if (user.status !== 'disabled') {
+        state.currentUser = user;
+        saveAuthSession(user);
+        document.documentElement.className = 'is-authenticated';
+        if (onAuthenticated) onAuthenticated(user);
+        return;
+      }
     }
-  }
 
-  // Not authenticated or disabled -> Show Login Screen
-  clearAuthSession();
-  document.documentElement.className = 'is-unauthenticated';
-  return false;
+    // Unauthenticated or disabled user -> enforce login screen
+    clearAuthSession();
+    state.currentUser = null;
+    document.documentElement.className = 'is-unauthenticated';
+  });
 }
 
 export function checkUserDisabledAndEnforceLogout() {

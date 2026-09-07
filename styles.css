@@ -781,9 +781,10 @@ html, body {
   color: #94a3b8;
 }
 
-/* Team & Settings Dashboard Container & Cards */
+/* Team, Settings & Roles Dashboard Container & Cards */
 .team-dashboard-container,
-.settings-dashboard-container {
+.settings-dashboard-container,
+.rbac-dashboard-container {
   flex: 1;
   height: 100%;
   display: flex;
@@ -791,6 +792,7 @@ html, body {
   background-color: var(--bg-app);
   overflow-y: auto;
   padding: 24px 32px;
+  box-sizing: border-box;
 }
 
 .team-card,
@@ -7063,7 +7065,8 @@ html, body {
 
   .leads-dashboard-container,
   .team-dashboard-container,
-  .settings-dashboard-container {
+  .settings-dashboard-container,
+  .rbac-dashboard-container {
     padding: 16px 20px;
   }
 
@@ -7204,9 +7207,165 @@ html, body {
 @media (max-width: 768px) {
   .leads-dashboard-container,
   .team-dashboard-container,
-  .settings-dashboard-container {
+  .settings-dashboard-container,
+  .rbac-dashboard-container {
     padding: 10px 12px;
     gap: 10px;
+  }
+
+  /* Roles & Permissions Mobile Responsive */
+  .rbac-filter-pills-row {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .rbac-filter-pill {
+    padding: 5px 10px;
+    font-size: 11.5px;
+  }
+
+  .rbac-view-tabs-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    margin-top: 8px;
+    margin-bottom: 12px;
+  }
+
+  .rbac-tab-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .rbac-search-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .rbac-search-wrap {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+    height: 36px;
+  }
+
+  .rbac-user-count-badge {
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Transform table to card on mobile */
+  .rbac-table-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  .rbac-users-table,
+  .rbac-users-table tbody {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .rbac-users-table thead {
+    display: none !important;
+  }
+
+  .rbac-users-table tbody tr {
+    display: flex !important;
+    flex-direction: column !important;
+    background: #ffffff !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 12px !important;
+    padding: 14px !important;
+    margin-bottom: 10px !important;
+    box-shadow: var(--shadow-sm) !important;
+    gap: 10px !important;
+  }
+
+  .rbac-users-table tbody tr:hover {
+    background-color: #ffffff !important;
+  }
+
+  .rbac-users-table tbody td {
+    display: block !important;
+    padding: 0 !important;
+    border: none !important;
+    width: 100% !important;
+  }
+
+  .rbac-users-table tbody td:nth-child(1) {
+    order: 1;
+  }
+
+  .rbac-users-table tbody td:nth-child(2) {
+    order: 2;
+  }
+
+  .rbac-users-table tbody td:nth-child(2) span {
+    font-size: 12px !important;
+    color: var(--text-muted) !important;
+    word-break: break-all;
+    display: block;
+  }
+
+  .rbac-users-table tbody td:nth-child(3) {
+    order: 3;
+  }
+
+  .btn-view-user-perms {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+  }
+
+  .rbac-users-table tbody td:nth-child(4) {
+    order: 4;
+    padding-top: 8px !important;
+    border-top: 1px solid #f1f5f9 !important;
+  }
+
+  .rbac-role-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 38px !important;
+    font-size: 13px !important;
+    box-sizing: border-box !important;
+  }
+
+  .rbac-roles-card {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .rbac-role-card-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 0;
+  }
+
+  .btn-edit-role-perms {
+    align-self: flex-start;
+    padding: 4px 8px;
+    background-color: #faf6f0;
+    border-radius: 6px;
   }
 
   .team-card,
@@ -7796,7 +7955,8 @@ html, body {
 @media (max-width: 480px) {
   .leads-dashboard-container,
   .team-dashboard-container,
-  .settings-dashboard-container {
+  .settings-dashboard-container,
+  .rbac-dashboard-container {
     padding: 8px 10px;
     gap: 8px;
     box-sizing: border-box;
@@ -7997,42 +8157,8 @@ html, body {
 /* ==========================================================================
    ROLES & PERMISSIONS (RBAC) STYLES
    ========================================================================== */
-.rbac-dashboard-container {
-  padding: 24px 32px;
-  width: 100%;
-  height: 100%;
-  flex: 1;
-  overflow-y: auto;
-  background-color: var(--bg-app);
-  box-sizing: border-box;
-}
-
-.rbac-header-section {
+.rbac-header-controls {
   margin-bottom: 20px;
-}
-
-.rbac-breadcrumb {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  color: var(--text-light);
-  text-transform: uppercase;
-  margin-bottom: 6px;
-}
-
-.rbac-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.rbac-page-title {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text-main);
-  letter-spacing: -0.3px;
-  margin: 0 0 4px 0;
 }
 
 .rbac-page-subtitle {
