@@ -183,6 +183,8 @@ export function renderLogActionPill(log, cat) {
       return `<span class="log-action-pill new" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;"><i class="fa-solid fa-cloud-arrow-down"></i> Inbound Lead</span>`;
     case 'incoming_message':
       return `<span class="log-action-pill message_sent" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0;"><i class="fa-solid fa-inbox"></i> Inbound Message</span>`;
+    case 'field_update':
+      return `<span class="log-action-pill field_update" style="background:#fef3c7;color:#92400e;border-color:#fde68a;"><i class="fa-solid fa-shapes"></i> Custom Field</span>`;
     case 'message_sent':
       return `<span class="log-action-pill message_sent"><i class="fa-solid fa-paper-plane"></i> Message Sent</span>`;
     case 'assignee_change':

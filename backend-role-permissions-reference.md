@@ -261,7 +261,7 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email == 'admin@goldcash.com' ||
+        request.auth.token.email in ['goldcash.co@gmail.com', 'ritesh@codexorr.com'] ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'admin'])
       );

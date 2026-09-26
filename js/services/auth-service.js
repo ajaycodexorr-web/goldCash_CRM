@@ -7,7 +7,8 @@ import { elements } from '../dom/elements.js';
 import { loadTeamMembers, saveTeamMembers, syncUsersFromFirestore, syncRolesFromFirestore } from './user-service.js';
 import { showToast } from '../utils/notifications.js';
 import { addAuditLog } from './logging-service.js';
-import { initializeFirebase, firebaseSignInWithEmail, firebaseCreateAuthUser, firebaseSignOutUser, onFirebaseAuthStateChanged, getCurrentAuthUser, saveUserToFirestore, fetchUsersFromFirestore } from '../../firebase-config.js';
+import { isSuperAdminEmail, getSuperAdminAccount } from '../constants/super-admins.js';
+import { initializeFirebase, firebaseSignInWithEmail, firebaseSignOutUser, onFirebaseAuthStateChanged, getCurrentAuthUser, saveUserToFirestore, fetchUsersFromFirestore } from '../../firebase-config.js';
 
 const SESSION_KEY = 'crm_auth_session_v1';
 
@@ -75,24 +76,12 @@ export async function loginUser(email, password) {
     console.warn("Firebase Native Auth attempt:", fbErr.code || fbErr.message);
   }
 
-  // Fallback bootstrap for root admin if not registered yet in Firebase Auth
+  const superAdminAccount = getSuperAdminAccount(cleanEmail);
   if (!firebaseAuthSuccess) {
-    if (cleanEmail === 'admin@goldcash.com' && cleanPass === 'admin123') {
-      try {
-        await firebaseCreateAuthUser(cleanEmail, cleanPass);
-        firebaseAuthSuccess = true;
-      } catch (createErr) {
-        if (createErr.code === 'auth/email-already-in-use') {
-          throw new Error('Invalid Password for Firebase Account');
-        }
-        throw createErr;
-      }
-    } else {
-      const msg = authError?.code === 'auth/invalid-credential' || authError?.code === 'auth/wrong-password' || authError?.code === 'auth/user-not-found'
-        ? 'Invalid Email or Password'
-        : (authError?.message || 'Invalid Email or Password');
-      throw new Error(msg);
-    }
+    const msg = authError?.code === 'auth/invalid-credential' || authError?.code === 'auth/wrong-password' || authError?.code === 'auth/user-not-found'
+      ? 'Invalid Email or Password'
+      : (authError?.message || 'Invalid Email or Password');
+    throw new Error(msg);
   }
 
   // 2. Fetch latest team members from Firestore to verify user is active and has not been deleted
@@ -109,7 +98,7 @@ export async function loginUser(email, password) {
   let user = membersList.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
 
   // 3. For sub-users (non-root admin), if deleted from Firestore / Team, BLOCK LOGIN immediately
-  if (cleanEmail !== 'admin@goldcash.com') {
+  if (!superAdminAccount) {
     if (!user) {
       // User was deleted by admin! Sign out from Firebase Auth and reject
       await firebaseSignOutUser();
@@ -124,8 +113,8 @@ export async function loginUser(email, password) {
     // Root Super Admin profile
     if (!user) {
       user = {
-        id: 'usr_admin',
-        name: 'Super Admin',
+        id: superAdminAccount.id,
+        name: superAdminAccount.name,
         email: cleanEmail,
         role: 'super_admin',
         status: 'active'
@@ -138,7 +127,7 @@ export async function loginUser(email, password) {
   // 4. Save Super Admin doc under Firebase UID and sync roles/users
   try {
     const authUser = getCurrentAuthUser();
-    if (authUser && user && cleanEmail === 'admin@goldcash.com') {
+    if (authUser && user && superAdminAccount) {
       user.firebaseUid = authUser.uid;
       await saveUserToFirestore({
         ...user,
@@ -191,7 +180,7 @@ export function initAuthCheck(onAuthenticated) {
       const email = fbUser.email.toLowerCase();
 
       // If not primary super admin, verify user exists in Firestore team members list and is active
-      if (email !== 'admin@goldcash.com') {
+      if (!isSuperAdminEmail(email)) {
         let membersList = state.teamMembers || [];
         try {
           const fUsers = await fetchUsersFromFirestore();
@@ -223,9 +212,10 @@ export function initAuthCheck(onAuthenticated) {
       // Root Super Admin
       let user = state.teamMembers.find(u => (u.email && u.email.toLowerCase() === email));
       if (!user) {
+        const account = getSuperAdminAccount(email);
         user = {
-          id: fbUser.uid || 'usr_admin',
-          name: 'Super Admin',
+          id: fbUser.uid || account.id,
+          name: account.name,
           email: email,
           role: 'super_admin',
           status: 'active'
@@ -275,7 +265,7 @@ export function checkUserDisabledAndEnforceLogout() {
     (currentEmail && u.email && u.email.toLowerCase() === currentEmail.toLowerCase())
   );
 
-  const isDeletedOrMissing = !latest && currentEmail && currentEmail !== 'admin@goldcash.com';
+  const isDeletedOrMissing = !latest && currentEmail && !isSuperAdminEmail(currentEmail);
   const isDisabled = isDeletedOrMissing || (latest && latest.status === 'disabled') || (state.currentUser && state.currentUser.status === 'disabled');
 
   if (isDisabled) {

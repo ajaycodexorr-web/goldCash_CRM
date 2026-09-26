@@ -8,6 +8,7 @@ import { escapeHtml, getInitials } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
 import { addSubUser, toggleUserStatus, deleteSubUser, resetUserPassword } from '../services/user-service.js';
 import { addAuditLog } from '../services/logging-service.js';
+import { isSuperAdminEmail } from '../constants/super-admins.js';
 
 let pendingResetUserId = null;
 
@@ -166,7 +167,7 @@ export function renderTeamList(onTeamUpdated) {
 
   const allUsers = state.teamMembers || [];
   // Exclude Super Admin so the table only displays created Sub Admins and Makers
-  const users = allUsers.filter(u => u.role !== 'super_admin' && u.role !== 'admin' && u.id !== 'usr_admin' && u.email !== 'admin@goldcash.com');
+  const users = allUsers.filter(u => u.role !== 'super_admin' && u.role !== 'admin' && !isSuperAdminEmail(u.email));
   if (countEl) countEl.textContent = users.length;
 
   if (users.length === 0) {

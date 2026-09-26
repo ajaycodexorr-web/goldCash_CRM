@@ -589,6 +589,24 @@ export async function updateLeadNotes(leadId, notes) {
   });
 }
 
+/**
+ * Update custom fields array on a lead document in Firestore
+ * @param {string} leadId
+ * @param {Array} customFields Array of { id, title, type, value, checked, createdAt, createdBy }
+ */
+export async function updateLeadCustomFields(leadId, customFields) {
+  if (!db || !leadId) {
+    throw new Error("Firestore is not connected");
+  }
+
+  console.log(`🏷️ [Firestore] Updating custom fields for lead [${leadId}] (${customFields?.length || 0} fields)`);
+  const leadRef = doc(db, 'leads', leadId);
+  await updateDoc(leadRef, {
+    customFields: Array.isArray(customFields) ? customFields : [],
+    updatedAt: serverTimestamp()
+  });
+}
+
 export async function saveUserToFirestore(userData) {
   if (!db || !userData) {
     console.warn("⚠️ [Firestore] Database not initialized yet. Skipping user save.");

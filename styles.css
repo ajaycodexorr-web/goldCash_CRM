@@ -5912,6 +5912,403 @@ html, body {
   box-shadow: 0 3px 8px rgba(223, 133, 22, 0.3);
 }
 
+/* =========================================================
+   CONTACT DETAILS CUSTOM FIELDS (Text, Chip, Check)
+   ========================================================= */
+.contact-custom-fields-box {
+  background: #ffffff;
+  border: 1px solid #ede8e1;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(180, 140, 100, 0.07);
+}
+
+.custom-fields-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.custom-fields-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.custom-fields-count-badge {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.btn-toggle-add-field {
+  background: linear-gradient(135deg, rgba(223, 133, 22, 0.08), rgba(223, 133, 22, 0.16));
+  color: var(--crm-primary, #df8516);
+  border: 1px solid rgba(223, 133, 22, 0.3);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-toggle-add-field:hover {
+  background: var(--crm-primary);
+  color: #ffffff;
+  border-color: var(--crm-primary);
+  box-shadow: 0 2px 6px rgba(223, 133, 22, 0.25);
+}
+
+.contact-add-field-form {
+  background: #fdfbf7;
+  border: 1px dashed #e2d9cc;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  animation: slideDownField 0.2s ease;
+}
+
+@keyframes slideDownField {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.form-group-field {
+  margin-bottom: 8px;
+}
+
+.field-input-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.required-star {
+  color: #ef4444;
+}
+
+.custom-field-input {
+  width: 100%;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #ffffff;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.custom-field-input:focus {
+  border-color: var(--crm-primary, #df8516);
+  box-shadow: 0 0 0 3px rgba(223, 133, 22, 0.15);
+}
+
+.field-type-segmented-control {
+  display: flex;
+  background: #e2e8f0;
+  padding: 2.5px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.type-segment-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.type-segment-btn:hover {
+  color: #1e293b;
+}
+
+.type-segment-btn.active {
+  background: #ffffff;
+  color: var(--crm-primary, #df8516);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  font-weight: 700;
+}
+
+.custom-check-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 6px 12px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease;
+}
+
+.custom-check-toggle-label:hover {
+  border-color: var(--crm-primary, #df8516);
+}
+
+.custom-field-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--crm-primary, #df8516);
+  cursor: pointer;
+}
+
+.custom-check-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.add-field-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.btn-cancel-field {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-cancel-field:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.btn-submit-field {
+  background: var(--crm-primary, #df8516);
+  color: #ffffff;
+  border: none;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 1px 3px rgba(223, 133, 22, 0.25);
+  transition: all 0.15s ease;
+}
+
+.btn-submit-field:hover {
+  background: var(--crm-primary-hover, #c7710c);
+  transform: translateY(-1px);
+}
+
+.contact-empty-fields {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 10px;
+  color: #94a3b8;
+  font-size: 11.5px;
+  text-align: center;
+  gap: 4px;
+}
+
+.contact-empty-fields i {
+  font-size: 20px;
+  opacity: 0.5;
+  margin-bottom: 2px;
+}
+
+.contact-custom-fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.custom-field-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  transition: all 0.15s ease;
+}
+
+.custom-field-item:hover {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.custom-field-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.custom-field-title-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.custom-field-type-icon {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.custom-field-val-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+.custom-field-val-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+  width: fit-content;
+  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.1);
+}
+
+.custom-field-val-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  width: fit-content;
+  transition: all 0.15s ease;
+}
+
+.custom-field-val-check.checked {
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.custom-field-val-check.checked:hover {
+  background: #dcfce7;
+}
+
+.custom-field-val-check.unchecked {
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.custom-field-val-check.unchecked:hover {
+  background: #e2e8f0;
+}
+
+.add-field-form-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--crm-primary, #df8516);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.custom-field-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+}
+
+.btn-edit-field {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11.5px;
+  transition: all 0.15s ease;
+}
+
+.btn-edit-field:hover {
+  color: var(--crm-primary, #df8516);
+  background: rgba(223, 133, 22, 0.12);
+}
+
+.btn-delete-field {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.btn-delete-field:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
 /* Notes Feed */
 .contact-notes-section {
   display: flex;

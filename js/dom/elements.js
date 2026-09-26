@@ -262,5 +262,26 @@ export const elements = {
   contactDetailsLastActivity: document.getElementById('contactDetailsLastActivity'),
   contactCreatedBy: document.getElementById('contactCreatedBy'),
   contactCreatedOn: document.getElementById('contactCreatedOn'),
-  contactViewAuditBtn: document.getElementById('contactViewAuditBtn')
+  contactViewAuditBtn: document.getElementById('contactViewAuditBtn'),
+
+  // Custom Fields in Contact Details Sidebar
+  contactCustomFieldsBox: document.getElementById('contactCustomFieldsBox'),
+  contactFieldsCountBadge: document.getElementById('contactFieldsCountBadge'),
+  toggleAddFieldBtn: document.getElementById('toggleAddFieldBtn'),
+  contactAddFieldForm: document.getElementById('contactAddFieldForm'),
+  customFieldEditingId: document.getElementById('customFieldEditingId'),
+  customFieldFormHeading: document.getElementById('customFieldFormHeading'),
+  customFieldTitleInput: document.getElementById('customFieldTitleInput'),
+  customFieldTypeControl: document.getElementById('customFieldTypeControl'),
+  customFieldSelectedType: document.getElementById('customFieldSelectedType'),
+  customFieldValueGroup: document.getElementById('customFieldValueGroup'),
+  customFieldValueLabel: document.getElementById('customFieldValueLabel'),
+  customFieldValueInput: document.getElementById('customFieldValueInput'),
+  customFieldCheckGroup: document.getElementById('customFieldCheckGroup'),
+  customFieldCheckInput: document.getElementById('customFieldCheckInput'),
+  customCheckStatusText: document.getElementById('customCheckStatusText'),
+  cancelAddFieldBtn: document.getElementById('cancelAddFieldBtn'),
+  saveCustomFieldSubmitBtn: document.getElementById('saveCustomFieldSubmitBtn'),
+  contactDetailsEmptyFields: document.getElementById('contactDetailsEmptyFields'),
+  contactDetailsCustomFieldsList: document.getElementById('contactDetailsCustomFieldsList')
 };

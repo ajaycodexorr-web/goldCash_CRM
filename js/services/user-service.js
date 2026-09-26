@@ -1,4 +1,5 @@
 import { state } from '../state/app-state.js';
+import { SUPER_ADMIN_ACCOUNTS, SUPER_ADMIN_IDS, isSuperAdminEmail } from '../constants/super-admins.js';
 import { saveUserToFirestore, updateUserStatusInFirestore, deleteUserFromFirestore, fetchUsersFromFirestore, fetchRolesFromFirestore, saveRoleToFirestore } from '../../firebase-config.js';
 
 // ==========================================================================
@@ -93,17 +94,14 @@ export const DEFAULT_PERMISSIONS = Object.fromEntries(
 // ==========================================================================
 // Default Users Catalog (Super Admin Only)
 // ==========================================================================
-export const DEFAULT_TEAM_MEMBERS = [
-  {
-    id: "usr_admin",
-    name: "Super Admin",
-    email: "admin@goldcash.com",
-    password: "admin123",
-    role: "super_admin",
-    status: "active",
-    createdAt: new Date().toISOString()
-  }
-];
+export const DEFAULT_TEAM_MEMBERS = SUPER_ADMIN_ACCOUNTS.map(a => ({
+  id: a.id,
+  name: a.name,
+  email: a.email,
+  role: "super_admin",
+  status: "active",
+  createdAt: new Date().toISOString()
+}));
 
 // ==========================================================================
 // Roles Storage & Helpers
@@ -201,12 +199,14 @@ export async function assignUserRole(userId, newRoleId) {
     throw new Error('User not found.');
   }
 
-  if (user.id === 'usr_admin' && newRoleId !== 'super_admin') {
+  const isRootSuperAdmin = SUPER_ADMIN_IDS.includes(user.id) || isSuperAdminEmail(user.email);
+
+  if (isRootSuperAdmin && newRoleId !== 'super_admin') {
     throw new Error('Primary Super Admin account role cannot be changed.');
   }
 
-  if (newRoleId === 'super_admin' && user.id !== 'usr_admin') {
-    throw new Error('Permission denied: There can only be 1 Super Admin. Additional users can only be Sub Admin or Maker.');
+  if (newRoleId === 'super_admin' && !isRootSuperAdmin) {
+    throw new Error('Permission denied: Super Admin role is reserved for the primary admin accounts. Additional users can only be Sub Admin or Maker.');
   }
 
   if (isSubAdmin && (newRoleId === 'super_admin' || newRoleId === 'sub_admin')) {
@@ -307,9 +307,11 @@ export async function syncUsersFromFirestore() {
     const fUsers = await fetchUsersFromFirestore();
     if (fUsers && Array.isArray(fUsers) && fUsers.length > 0) {
       const merged = [...fUsers];
-      if (!merged.some(u => u.role === 'super_admin' || u.id === 'usr_admin')) {
-        merged.unshift(DEFAULT_TEAM_MEMBERS[0]);
-      }
+      DEFAULT_TEAM_MEMBERS.slice().reverse().forEach(admin => {
+        if (!merged.some(u => (u.email || '').toLowerCase() === admin.email)) {
+          merged.unshift(admin);
+        }
+      });
 
       state.teamMembers = merged.map(fUser => {
         const existing = state.teamMembers.find(m => m.id === fUser.id);

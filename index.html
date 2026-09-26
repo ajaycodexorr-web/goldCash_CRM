@@ -72,7 +72,7 @@
           <label for="loginEmail">Email Address</label>
           <div class="input-with-icon">
             <i class="fa-regular fa-envelope input-icon"></i>
-            <input type="email" id="loginEmail" placeholder="admin@goldcash.com" required autocomplete="email">
+            <input type="email" id="loginEmail" placeholder="goldcash.co@gmail.com" required autocomplete="email">
           </div>
         </div>
 
@@ -817,6 +817,81 @@
               </form>
             </div>
 
+            <!-- Custom Fields Section (Add Field & Listing) -->
+            <div class="contact-custom-fields-box" id="contactCustomFieldsBox">
+              <div class="custom-fields-header">
+                <div class="custom-fields-title">
+                  <i class="fa-solid fa-shapes"></i> Custom Fields
+                  <span class="custom-fields-count-badge" id="contactFieldsCountBadge">0</span>
+                </div>
+                <button type="button" id="toggleAddFieldBtn" class="btn-toggle-add-field" title="Add a new custom field">
+                  <i class="fa-solid fa-plus"></i> Add Field
+                </button>
+              </div>
+
+              <!-- Inline Add Field Form (Expandable) -->
+              <form id="contactAddFieldForm" class="contact-add-field-form" style="display: none;">
+                <input type="hidden" id="customFieldEditingId" value="" />
+                <div class="add-field-form-title" id="customFieldFormHeading" style="display: none;">
+                  <i class="fa-solid fa-pen-to-square"></i> Edit Custom Field
+                </div>
+                <div class="form-group-field">
+                  <label for="customFieldTitleInput" class="field-input-label">Field Title <span class="required-star">*</span></label>
+                  <input type="text" id="customFieldTitleInput" class="custom-field-input" placeholder="e.g., Gold Karat, KYC Verified, Tier..." required autocomplete="off" />
+                </div>
+
+                <div class="form-group-field">
+                  <label class="field-input-label">Field Type</label>
+                  <div class="field-type-segmented-control" id="customFieldTypeControl">
+                    <button type="button" class="type-segment-btn active" data-type="text">
+                      <i class="fa-solid fa-font"></i> Text
+                    </button>
+                    <button type="button" class="type-segment-btn" data-type="chip">
+                      <i class="fa-solid fa-tags"></i> Chip
+                    </button>
+                    <button type="button" class="type-segment-btn" data-type="check">
+                      <i class="fa-regular fa-square-check"></i> Check
+                    </button>
+                  </div>
+                  <input type="hidden" id="customFieldSelectedType" value="text" />
+                </div>
+
+                <!-- Dynamic Value Input for Text and Chip -->
+                <div class="form-group-field" id="customFieldValueGroup">
+                  <label for="customFieldValueInput" class="field-input-label" id="customFieldValueLabel">Field Value <span class="required-star">*</span></label>
+                  <input type="text" id="customFieldValueInput" class="custom-field-input" placeholder="Enter value (e.g. 22 Karat, 15 grams)..." required autocomplete="off" />
+                </div>
+
+                <!-- Check Type Initial Toggle (Shown only when type=check) -->
+                <div class="form-group-field" id="customFieldCheckGroup" style="display: none;">
+                  <label class="field-input-label">Initial Status</label>
+                  <label class="custom-check-toggle-label">
+                    <input type="checkbox" id="customFieldCheckInput" class="custom-field-checkbox" />
+                    <span class="custom-check-slider"></span>
+                    <span class="custom-check-text" id="customCheckStatusText">Unchecked</span>
+                  </label>
+                </div>
+
+                <div class="add-field-actions">
+                  <button type="button" id="cancelAddFieldBtn" class="btn-cancel-field">Cancel</button>
+                  <button type="submit" id="saveCustomFieldSubmitBtn" class="btn-submit-field">
+                    <i class="fa-solid fa-check"></i> Save Field
+                  </button>
+                </div>
+              </form>
+
+              <!-- Custom Fields Empty State -->
+              <div class="contact-empty-fields" id="contactDetailsEmptyFields" style="display: none;">
+                <i class="fa-solid fa-layer-group"></i>
+                <p>No custom fields added yet.</p>
+              </div>
+
+              <!-- Custom Fields Listing Feed -->
+              <div class="contact-custom-fields-list" id="contactDetailsCustomFieldsList">
+                <!-- Rendered dynamically by JS -->
+              </div>
+            </div>
+
             <!-- Notes History Listing Feed -->
             <div class="contact-notes-section">
               <div class="notes-feed-title">
@@ -1021,7 +1096,7 @@
                   <div class="user-avatar-initials settings-avatar" id="settingsProfileAvatar">SA</div>
                   <div class="settings-profile-meta">
                     <h3 id="settingsProfileName" style="display: none;"></h3>
-                    <div id="settingsProfileEmail" class="settings-email">admin@goldcash.com</div>
+                    <div id="settingsProfileEmail" class="settings-email">goldcash.co@gmail.com</div>
                     <span id="settingsProfileRole" class="user-role-badge super_admin">SUPER ADMIN</span>
                   </div>
                 </div>

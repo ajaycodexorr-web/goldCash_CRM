@@ -76,9 +76,24 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, () => {
+let currentPort = parseInt(PORT, 10) || 3000;
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`Port ${currentPort} is already in use. Retrying on port ${currentPort + 1}...`);
+    currentPort++;
+    setTimeout(() => {
+      server.listen(currentPort);
+    }, 200);
+  } else {
+    console.error('Server error:', err);
+  }
+});
+
+server.listen(currentPort, () => {
   console.log(`\n======================================================`);
   console.log(` WhatsApp Lead & Live Chat Testing Panel Running!`);
-  console.log(` Local URL: http://localhost:${PORT}`);
+  console.log(` Local URL: http://localhost:${currentPort}`);
   console.log(`======================================================\n`);
 });
+

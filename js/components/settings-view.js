@@ -89,7 +89,7 @@ function setupTabs() {
  * Render Current User Details into Settings Profile Card
  */
 export function renderSettingsView() {
-  const current = state.currentUser || { id: 'usr_admin', name: 'Super Admin', email: 'admin@goldcash.com', role: 'super_admin', status: 'active' };
+  const current = state.currentUser || { id: 'usr_admin', name: 'Super Admin', email: 'goldcash.co@gmail.com', role: 'super_admin', status: 'active' };
   const isSuperAdmin = current.role === 'super_admin' || current.role === 'admin';
   const isSubAdmin = current.role === 'sub_admin';
   const canManagePerms = isSuperAdmin || (isSubAdmin && hasPermission('canManagePermissions', current));

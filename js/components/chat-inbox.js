@@ -2,7 +2,7 @@
  * Team Inbox Conversations List & Active Chat Pane Controller
  */
 
-import { subscribeToMessages, markLeadAsRead, resolveWhatsAppMediaUrl, addLeadNote, updateLeadStatus, updateLeadAssignee, updateLeadBranch } from '../../firebase-config.js';
+import { subscribeToMessages, markLeadAsRead, resolveWhatsAppMediaUrl, addLeadNote, updateLeadStatus, updateLeadAssignee, updateLeadBranch, updateLeadCustomFields } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, formatTimeOnly, parseDate, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote, hasWhatsAppConversation } from '../utils/formatters.js';
@@ -323,6 +323,220 @@ export function setupConversationsHandlers(switchView, renderLeadsView) {
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Add Note';
+        }
+      }
+    });
+  }
+
+  // --- Custom Fields Handlers (Add Field, Text / Chip / Check) ---
+  if (elements.toggleAddFieldBtn) {
+    elements.toggleAddFieldBtn.addEventListener('click', () => {
+      if (!elements.contactAddFieldForm) return;
+      const isVisible = elements.contactAddFieldForm.style.display === 'block';
+      if (isVisible) {
+        elements.contactAddFieldForm.style.display = 'none';
+      } else {
+        // Reset to clean Add mode if it was in edit mode
+        if (elements.customFieldEditingId) elements.customFieldEditingId.value = '';
+        if (elements.customFieldFormHeading) elements.customFieldFormHeading.style.display = 'none';
+        if (elements.saveCustomFieldSubmitBtn) elements.saveCustomFieldSubmitBtn.innerHTML = '<i class="fa-solid fa-check"></i> Save Field';
+        if (elements.customFieldTitleInput) elements.customFieldTitleInput.value = '';
+        if (elements.customFieldValueInput) elements.customFieldValueInput.value = '';
+        if (elements.customFieldCheckInput) {
+          elements.customFieldCheckInput.checked = false;
+          if (elements.customCheckStatusText) elements.customCheckStatusText.textContent = 'Unchecked';
+        }
+        elements.contactAddFieldForm.style.display = 'block';
+        if (elements.customFieldTitleInput) elements.customFieldTitleInput.focus();
+      }
+    });
+  }
+
+  if (elements.cancelAddFieldBtn) {
+    elements.cancelAddFieldBtn.addEventListener('click', () => {
+      if (elements.contactAddFieldForm) {
+        elements.contactAddFieldForm.style.display = 'none';
+        elements.contactAddFieldForm.reset();
+      }
+      if (elements.customFieldEditingId) elements.customFieldEditingId.value = '';
+      if (elements.customFieldFormHeading) elements.customFieldFormHeading.style.display = 'none';
+      if (elements.saveCustomFieldSubmitBtn) elements.saveCustomFieldSubmitBtn.innerHTML = '<i class="fa-solid fa-check"></i> Save Field';
+
+      if (elements.customFieldTypeControl) {
+        elements.customFieldTypeControl.querySelectorAll('.type-segment-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.type === 'text');
+        });
+      }
+      if (elements.customFieldSelectedType) elements.customFieldSelectedType.value = 'text';
+      if (elements.customFieldValueGroup) elements.customFieldValueGroup.style.display = 'block';
+      if (elements.customFieldCheckGroup) elements.customFieldCheckGroup.style.display = 'none';
+      if (elements.customFieldValueInput) {
+        elements.customFieldValueInput.required = true;
+        elements.customFieldValueInput.placeholder = 'Enter value (e.g. 22 Karat, 15 grams)...';
+      }
+      if (elements.customFieldValueLabel) {
+        elements.customFieldValueLabel.innerHTML = 'Field Value <span class="required-star">*</span>';
+      }
+      if (elements.customCheckStatusText) {
+        elements.customCheckStatusText.textContent = 'Unchecked';
+      }
+    });
+  }
+
+  // Type Selector Segment Buttons (Text, Chip, Check)
+  if (elements.customFieldTypeControl) {
+    elements.customFieldTypeControl.querySelectorAll('.type-segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        elements.customFieldTypeControl.querySelectorAll('.type-segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const selectedType = btn.dataset.type || 'text';
+        if (elements.customFieldSelectedType) elements.customFieldSelectedType.value = selectedType;
+
+        if (selectedType === 'text') {
+          if (elements.customFieldValueGroup) elements.customFieldValueGroup.style.display = 'block';
+          if (elements.customFieldCheckGroup) elements.customFieldCheckGroup.style.display = 'none';
+          if (elements.customFieldValueLabel) elements.customFieldValueLabel.innerHTML = 'Field Value <span class="required-star">*</span>';
+          if (elements.customFieldValueInput) {
+            elements.customFieldValueInput.required = true;
+            elements.customFieldValueInput.placeholder = 'Enter value (e.g. 22 Karat, 15 grams)...';
+            elements.customFieldValueInput.focus();
+          }
+        } else if (selectedType === 'chip') {
+          if (elements.customFieldValueGroup) elements.customFieldValueGroup.style.display = 'block';
+          if (elements.customFieldCheckGroup) elements.customFieldCheckGroup.style.display = 'none';
+          if (elements.customFieldValueLabel) elements.customFieldValueLabel.innerHTML = 'Chip Label / Tag <span class="required-star">*</span>';
+          if (elements.customFieldValueInput) {
+            elements.customFieldValueInput.required = true;
+            elements.customFieldValueInput.placeholder = 'Enter chip / tag label (e.g. VIP, Priority)...';
+            elements.customFieldValueInput.focus();
+          }
+        } else if (selectedType === 'check') {
+          if (elements.customFieldValueGroup) elements.customFieldValueGroup.style.display = 'none';
+          if (elements.customFieldValueInput) elements.customFieldValueInput.required = false;
+          if (elements.customFieldCheckGroup) elements.customFieldCheckGroup.style.display = 'block';
+        }
+      });
+    });
+  }
+
+  // Checkbox status text listener
+  if (elements.customFieldCheckInput) {
+    elements.customFieldCheckInput.addEventListener('change', (e) => {
+      if (elements.customCheckStatusText) {
+        elements.customCheckStatusText.textContent = e.target.checked ? 'Checked' : 'Unchecked';
+      }
+    });
+  }
+
+  // Submit Add / Edit Field Form
+  if (elements.contactAddFieldForm) {
+    elements.contactAddFieldForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (checkUserDisabledAndEnforceLogout()) return;
+
+      const targetLeadId = state.activeLeadId;
+      if (!targetLeadId) {
+        showToast('No active contact selected', 'warning');
+        return;
+      }
+
+      const lead = state.leads.find(l => l.id === targetLeadId);
+      if (!lead) return;
+
+      const title = elements.customFieldTitleInput ? elements.customFieldTitleInput.value.trim() : '';
+      const type = elements.customFieldSelectedType ? elements.customFieldSelectedType.value : 'text';
+      const editingFieldId = elements.customFieldEditingId ? elements.customFieldEditingId.value.trim() : '';
+
+      let value = '';
+      let isChecked = false;
+
+      if (type === 'check') {
+        isChecked = elements.customFieldCheckInput ? elements.customFieldCheckInput.checked : false;
+        value = isChecked ? 'Checked' : 'Unchecked';
+      } else {
+        value = elements.customFieldValueInput ? elements.customFieldValueInput.value.trim() : '';
+      }
+
+      if (!title) {
+        showToast('Please enter a field title', 'warning');
+        return;
+      }
+
+      if (type !== 'check' && !value) {
+        showToast('Please enter a field value', 'warning');
+        return;
+      }
+
+      const submitBtn = elements.saveCustomFieldSubmitBtn;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+      }
+
+      try {
+        if (!Array.isArray(lead.customFields)) {
+          lead.customFields = [];
+        }
+
+        if (editingFieldId) {
+          // UPDATE existing field
+          const targetField = lead.customFields.find(f => f.id === editingFieldId);
+          if (targetField) {
+            targetField.title = title;
+            targetField.type = type;
+            targetField.value = value;
+            targetField.checked = isChecked;
+            targetField.updatedAt = new Date().toISOString();
+            targetField.updatedBy = state.currentUser ? state.currentUser.name : 'Agent';
+          }
+
+          if (!state.demoMode) {
+            await updateLeadCustomFields(targetLeadId, lead.customFields);
+          }
+
+          addAuditLog('field_update', targetLeadId, lead.name || targetLeadId, `Updated custom field "${title}": ${value} (${type})`);
+          showToast(`Custom field "${title}" updated!`, 'info');
+        } else {
+          // ADD new field
+          const newField = {
+            id: 'cf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+            title: title,
+            type: type,
+            value: value,
+            checked: isChecked,
+            createdAt: new Date().toISOString(),
+            createdBy: state.currentUser ? state.currentUser.name : 'Agent'
+          };
+
+          lead.customFields.push(newField);
+
+          if (!state.demoMode) {
+            await updateLeadCustomFields(targetLeadId, lead.customFields);
+          }
+
+          addAuditLog('field_update', targetLeadId, lead.name || targetLeadId, `Added custom field "${title}": ${value} (${type})`);
+          showToast(`Custom field "${title}" added!`, 'info');
+        }
+
+        // Reset and hide form
+        if (elements.customFieldEditingId) elements.customFieldEditingId.value = '';
+        if (elements.customFieldFormHeading) elements.customFieldFormHeading.style.display = 'none';
+        if (elements.customFieldTitleInput) elements.customFieldTitleInput.value = '';
+        if (elements.customFieldValueInput) elements.customFieldValueInput.value = '';
+        if (elements.customFieldCheckInput) {
+          elements.customFieldCheckInput.checked = false;
+          if (elements.customCheckStatusText) elements.customCheckStatusText.textContent = 'Unchecked';
+        }
+        elements.contactAddFieldForm.style.display = 'none';
+
+        // Re-render Custom Fields list
+        renderContactCustomFields(lead);
+      } catch (err) {
+        showToast(`Failed to save custom field: ${err.message}`, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="fa-solid fa-check"></i> Save Field';
         }
       }
     });
@@ -657,6 +871,9 @@ export function renderContactDetailsPanel(lead) {
 
   // Render Sidebar Notes Feed
   renderContactDetailsNotesFeed(lead);
+
+  // Render Custom Fields
+  renderContactCustomFields(lead);
 }
 
 export function renderContactDetailsNotesFeed(lead) {
@@ -686,11 +903,11 @@ export function renderContactDetailsNotesFeed(lead) {
     const isLatest = idx === 0;
 
     return `
-      <div class="contact-note-card ${isLatest ? 'latest-note-card' : ''}">
-        <div class="note-card-top">
+      <div class="note-card-item ${isLatest ? 'latest-note' : ''}">
+        <div class="note-card-header">
           <div class="note-card-author">
-            <span class="note-card-author-avatar">${escapeHtml(initials)}</span>
-            <span>${escapeHtml(authorName)}</span>
+            <span class="note-author-avatar">${escapeHtml(initials)}</span>
+            <span class="note-author-name">${escapeHtml(authorName)}</span>
           </div>
           <span class="note-card-time" title="${escapeHtml(timeFormatted)}">
             <i class="fa-regular fa-clock"></i> ${escapeHtml(relTime)}
@@ -700,6 +917,180 @@ export function renderContactDetailsNotesFeed(lead) {
       </div>
     `;
   }).join('');
+}
+
+export function renderContactCustomFields(lead) {
+  if (!lead || !elements.contactDetailsCustomFieldsList) return;
+
+  const customFields = Array.isArray(lead.customFields) ? lead.customFields : [];
+  if (elements.contactFieldsCountBadge) {
+    elements.contactFieldsCountBadge.textContent = customFields.length;
+  }
+
+  if (customFields.length === 0) {
+    if (elements.contactDetailsEmptyFields) elements.contactDetailsEmptyFields.style.display = 'flex';
+    elements.contactDetailsCustomFieldsList.innerHTML = '';
+    return;
+  }
+
+  if (elements.contactDetailsEmptyFields) elements.contactDetailsEmptyFields.style.display = 'none';
+
+  elements.contactDetailsCustomFieldsList.innerHTML = customFields.map((field) => {
+    const fType = field.type || 'text';
+    const fieldId = escapeHtml(field.id);
+    const fieldTitle = escapeHtml(field.title || 'Field');
+
+    let typeIconHtml = '<i class="fa-solid fa-font custom-field-type-icon"></i>';
+    let valueHtml = '';
+
+    if (fType === 'chip') {
+      typeIconHtml = '<i class="fa-solid fa-tags custom-field-type-icon"></i>';
+      valueHtml = `<span class="custom-field-val-chip"><i class="fa-solid fa-tag"></i> ${escapeHtml(field.value || 'Tag')}</span>`;
+    } else if (fType === 'check') {
+      typeIconHtml = '<i class="fa-regular fa-square-check custom-field-type-icon"></i>';
+      const isChecked = Boolean(field.checked);
+      valueHtml = `
+        <div class="custom-field-val-check ${isChecked ? 'checked' : 'unchecked'}" data-toggle-check-id="${fieldId}" title="Click to toggle status">
+          <i class="${isChecked ? 'fa-solid fa-circle-check' : 'fa-regular fa-circle'}"></i>
+          <span>${isChecked ? 'Checked' : 'Unchecked'}</span>
+        </div>
+      `;
+    } else {
+      typeIconHtml = '<i class="fa-solid fa-font custom-field-type-icon"></i>';
+      valueHtml = `<span class="custom-field-val-text">${escapeHtml(field.value || '-')}</span>`;
+    }
+
+    return `
+      <div class="custom-field-item" data-field-id="${fieldId}">
+        <div class="custom-field-info">
+          <span class="custom-field-title-badge">${typeIconHtml} ${fieldTitle}</span>
+          ${valueHtml}
+        </div>
+        <div class="custom-field-actions-wrap">
+          <button type="button" class="btn-edit-field" data-edit-field-id="${fieldId}" title="Edit field">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          <button type="button" class="btn-delete-field" data-delete-field-id="${fieldId}" title="Delete field">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Attach Edit Field Listeners
+  elements.contactDetailsCustomFieldsList.querySelectorAll('[data-edit-field-id]').forEach(editBtn => {
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const fieldId = editBtn.dataset.editFieldId;
+      const targetField = (lead.customFields || []).find(f => f.id === fieldId);
+      if (!targetField) return;
+
+      // Populate form for editing
+      if (elements.customFieldEditingId) elements.customFieldEditingId.value = fieldId;
+      if (elements.customFieldFormHeading) {
+        elements.customFieldFormHeading.style.display = 'flex';
+        elements.customFieldFormHeading.innerHTML = `<i class="fa-solid fa-pen-to-square"></i> Edit "${escapeHtml(targetField.title)}"`;
+      }
+      if (elements.customFieldTitleInput) {
+        elements.customFieldTitleInput.value = targetField.title || '';
+      }
+
+      const fType = targetField.type || 'text';
+      if (elements.customFieldSelectedType) elements.customFieldSelectedType.value = fType;
+
+      if (elements.customFieldTypeControl) {
+        elements.customFieldTypeControl.querySelectorAll('.type-segment-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.type === fType);
+        });
+      }
+
+      if (fType === 'text') {
+        if (elements.customFieldValueGroup) elements.customFieldValueGroup.style.display = 'block';
+        if (elements.customFieldCheckGroup) elements.customFieldCheckGroup.style.display = 'none';
+        if (elements.customFieldValueLabel) elements.customFieldValueLabel.innerHTML = 'Field Value <span class="required-star">*</span>';
+        if (elements.customFieldValueInput) {
+          elements.customFieldValueInput.required = true;
+          elements.customFieldValueInput.placeholder = 'Enter value (e.g. 22 Karat, 15 grams)...';
+          elements.customFieldValueInput.value = targetField.value || '';
+        }
+      } else if (fType === 'chip') {
+        if (elements.customFieldValueGroup) elements.customFieldValueGroup.style.display = 'block';
+        if (elements.customFieldCheckGroup) elements.customFieldCheckGroup.style.display = 'none';
+        if (elements.customFieldValueLabel) elements.customFieldValueLabel.innerHTML = 'Chip Label / Tag <span class="required-star">*</span>';
+        if (elements.customFieldValueInput) {
+          elements.customFieldValueInput.required = true;
+          elements.customFieldValueInput.placeholder = 'Enter chip / tag label (e.g. VIP, Priority)...';
+          elements.customFieldValueInput.value = targetField.value || '';
+        }
+      } else if (fType === 'check') {
+        if (elements.customFieldValueGroup) elements.customFieldValueGroup.style.display = 'none';
+        if (elements.customFieldValueInput) elements.customFieldValueInput.required = false;
+        if (elements.customFieldCheckGroup) elements.customFieldCheckGroup.style.display = 'block';
+        const isChecked = Boolean(targetField.checked);
+        if (elements.customFieldCheckInput) elements.customFieldCheckInput.checked = isChecked;
+        if (elements.customCheckStatusText) elements.customCheckStatusText.textContent = isChecked ? 'Checked' : 'Unchecked';
+      }
+
+      if (elements.saveCustomFieldSubmitBtn) {
+        elements.saveCustomFieldSubmitBtn.innerHTML = '<i class="fa-solid fa-check"></i> Update Field';
+      }
+
+      if (elements.contactAddFieldForm) {
+        elements.contactAddFieldForm.style.display = 'block';
+        elements.contactAddFieldForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      if (elements.customFieldTitleInput) elements.customFieldTitleInput.focus();
+    });
+  });
+
+  // Attach Checkbox Toggle Listeners (Interactive checking/unchecking)
+  elements.contactDetailsCustomFieldsList.querySelectorAll('[data-toggle-check-id]').forEach(toggleEl => {
+    toggleEl.addEventListener('click', async () => {
+      if (checkUserDisabledAndEnforceLogout()) return;
+      const fieldId = toggleEl.dataset.toggleCheckId;
+      const targetField = (lead.customFields || []).find(f => f.id === fieldId);
+      if (!targetField) return;
+
+      targetField.checked = !targetField.checked;
+      targetField.value = targetField.checked ? 'Checked' : 'Unchecked';
+
+      try {
+        if (!state.demoMode) {
+          await updateLeadCustomFields(lead.id, lead.customFields);
+        }
+        addAuditLog('field_update', lead.id, lead.name || lead.id, `Toggled custom field "${targetField.title}" to ${targetField.value}`);
+        renderContactCustomFields(lead);
+      } catch (err) {
+        showToast(`Failed to update field: ${err.message}`, 'error');
+      }
+    });
+  });
+
+  // Attach Delete Field Listeners
+  elements.contactDetailsCustomFieldsList.querySelectorAll('[data-delete-field-id]').forEach(delBtn => {
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (checkUserDisabledAndEnforceLogout()) return;
+      const fieldId = delBtn.dataset.deleteFieldId;
+      const targetField = (lead.customFields || []).find(f => f.id === fieldId);
+      const fieldTitle = targetField ? targetField.title : 'Field';
+
+      lead.customFields = (lead.customFields || []).filter(f => f.id !== fieldId);
+
+      try {
+        if (!state.demoMode) {
+          await updateLeadCustomFields(lead.id, lead.customFields);
+        }
+        addAuditLog('field_update', lead.id, lead.name || lead.id, `Deleted custom field "${fieldTitle}"`);
+        showToast(`Field "${fieldTitle}" removed`, 'info');
+        renderContactCustomFields(lead);
+      } catch (err) {
+        showToast(`Failed to delete field: ${err.message}`, 'error');
+      }
+    });
+  });
 }
 
 export function loadMessagesForLead(leadId, renderLeadsView) {
