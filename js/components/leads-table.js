@@ -850,7 +850,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
     const currentAssigneeName = currentAssigneeId ? (lead.assigneeName || 'Unassigned') : 'Unassigned';
 
     return `
-      <div class="lead-card-row ${isDisabledUser ? 'row-disabled' : ''}" data-lead-id="${escapeHtml(lead.id)}">
+      <div class="lead-card-row ${isDisabledUser ? 'row-disabled' : ''} ${hasChat ? 'row-has-chat' : ''}" data-lead-id="${escapeHtml(lead.id)}">
         <!-- S.No. -->
         <div class="lead-sno-col">${serialNumber}</div>
 
@@ -969,12 +969,11 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
     });
   });
 
-  // Row Name Click to open chat (only if lead has WhatsApp conversation)
-  elements.leadsCardsList.querySelectorAll('.lead-profile-col').forEach(col => {
-    col.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const row = col.closest('.lead-card-row');
-      if (row && row.dataset.leadId && openLeadChat) {
+  // Row Click anywhere to open chat (only if lead has WhatsApp conversation), except on row controls
+  elements.leadsCardsList.querySelectorAll('.lead-card-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('select, button, a, input, textarea, label')) return;
+      if (row.dataset.leadId && openLeadChat) {
         const lead = state.leads.find(l => l.id === row.dataset.leadId);
         if (lead && hasWhatsAppConversation(lead)) {
           openLeadChat(row.dataset.leadId);

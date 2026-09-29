@@ -2136,6 +2136,10 @@ html, body {
   background-color: #f8fafc;
 }
 
+.lead-card-row.row-has-chat {
+  cursor: pointer;
+}
+
 /* Serial Number Column */
 .lead-sno-col {
   flex: 0 0 50px;
