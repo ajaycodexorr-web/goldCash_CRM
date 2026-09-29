@@ -6913,8 +6913,8 @@ html, body {
    RESPONSIVE MEDIA QUERIES (Mobile, Tablet, Desktop)
    ========================================================================== */
 
-/* Laptop Screens (1024px to 1439px): Slide-over details pane and spacious 2-column chat */
-@media (min-width: 1024px) and (max-width: 1439px) {
+/* Small Laptop Screens (1024px to 1279px): Slide-over details pane and spacious 2-column chat */
+@media (min-width: 1024px) and (max-width: 1279px) {
   .conversations-pane {
     width: 290px;
     min-width: 290px;
@@ -6946,7 +6946,15 @@ html, body {
   }
 }
 
-@media (min-width: 1440px) {
+@media (min-width: 1280px) and (max-width: 1439px) {
+  .conversations-pane {
+    width: 280px;
+    min-width: 280px;
+    max-width: 280px;
+  }
+}
+
+@media (min-width: 1280px) {
   .contact-details-pane {
     position: static !important;
     width: 320px !important;

@@ -471,6 +471,15 @@ export function openLeadChat(leadId, switchView, renderLeadsView) {
   }
   if (switchView) switchView('conversations');
   selectLead(leadId, renderLeadsView);
+  scrollActiveConversationIntoView();
+}
+
+// Scroll the chat list so the selected conversation is visible (e.g. when opened from the Leads page)
+function scrollActiveConversationIntoView() {
+  requestAnimationFrame(() => {
+    const activeItem = elements.conversationsList && elements.conversationsList.querySelector('.conv-item.active');
+    if (activeItem) activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
 }
 
 export function selectLead(leadId, renderLeadsView) {
@@ -493,14 +502,15 @@ export function selectLead(leadId, renderLeadsView) {
   if (elements.chatPlaceholder) elements.chatPlaceholder.style.display = 'none';
   if (elements.activeChatView) elements.activeChatView.style.display = 'flex';
 
-  // Only show contact details pane by default on Laptop L and above (>= 1440px)
-  const isLaptopL = window.innerWidth >= 1440;
+  // Show contact details pane by default on laptops & desktops; hide on tablets and phones
+  const isTouchDevice = window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+  const showDetailsByDefault = window.innerWidth >= 1024 && !isTouchDevice;
   if (elements.contactDetailsPane) {
-    elements.contactDetailsPane.style.display = isLaptopL ? 'flex' : 'none';
+    elements.contactDetailsPane.style.display = showDetailsByDefault ? 'flex' : 'none';
     elements.contactDetailsPane.classList.remove('mobile-open');
   }
   if (elements.toggleContactDetailsBtn) {
-    elements.toggleContactDetailsBtn.classList.toggle('active', isLaptopL);
+    elements.toggleContactDetailsBtn.classList.toggle('active', showDetailsByDefault);
   }
   if (elements.chatErrorBanner) elements.chatErrorBanner.style.display = 'none';
 
