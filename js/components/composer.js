@@ -9,7 +9,7 @@ import { escapeHtml } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
 import { addAuditLog } from '../services/logging-service.js';
 import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
-import { hasPermission } from '../services/user-service.js';
+import { hasPermission, isAssignableUser } from '../services/user-service.js';
 
 let activeMediaModalType = 'image';
 
@@ -318,8 +318,8 @@ export async function handleSendMessage(e, renderLeadsView, renderConversationsV
       activeLead.hasAdminReplied = true;
       if (activeLead.status === 'new') activeLead.status = 'contacted';
 
-      // Auto-assign lead to active agent if currently unassigned
-      if (!activeLead.assigneeId && state.currentUser) {
+      // Auto-assign lead to the replying team member if currently unassigned (never to Super Admins)
+      if (!activeLead.assigneeId && isAssignableUser(state.currentUser)) {
         activeLead.assigneeId = state.currentUser.id;
         activeLead.assigneeName = state.currentUser.name;
         if (!state.demoMode) {

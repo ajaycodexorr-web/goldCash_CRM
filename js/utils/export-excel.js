@@ -4,10 +4,10 @@
 
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
-import { formatFullDateTime, parseDate, escapeHtml, formatDisplayPhone, getLeadNotesList } from './formatters.js';
+import { formatFullDateTime, parseDate, escapeHtml, formatDisplayPhone, hasWhatsAppConversation } from './formatters.js';
 import { showToast } from './notifications.js';
 import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
-import { hasPermission } from '../services/user-service.js';
+import { hasPermission, getEffectiveAssigneeId } from '../services/user-service.js';
 
 export function setupExportHandlers() {
   if (elements.exportExcelBtn) {
@@ -118,6 +118,13 @@ export function handleConfirmExport() {
     return;
   }
 
+  // Same order as the leads table: latest last message first
+  const lastMessageTime = (lead) => {
+    const d = parseDate(lead.lastMessageAt || lead.updatedAt || lead.createdAt);
+    return d ? d.getTime() : 0;
+  };
+  filteredLeads.sort((a, b) => lastMessageTime(b) - lastMessageTime(a));
+
   exportLeadsToExcel(filteredLeads);
   closeExportModal();
 }
@@ -134,50 +141,21 @@ export async function exportLeadsToExcel(leadsToExport) {
 
       // Define columns and widths matching UI
       worksheet.columns = [
+        { header: 'S.No.', key: 'sno', width: 8 },
         { header: 'Name', key: 'name', width: 22 },
         { header: 'Phone number', key: 'phone', width: 20 },
-        { header: 'User Query', key: 'query', width: 50 },
         { header: 'Source', key: 'source', width: 18 },
         { header: 'Assigned', key: 'assigned', width: 20 },
         { header: 'Branch', key: 'branch', width: 22 },
         { header: 'Status', key: 'status', width: 16 },
-        { header: 'Notes', key: 'notes', width: 35 },
-        { header: 'Created Date', key: 'created', width: 26 }
+        { header: 'Created Date', key: 'created', width: 26 },
+        { header: 'Last Message Date', key: 'lastMessage', width: 26 }
       ];
 
       // Add rows
-      leadsToExport.forEach(lead => {
-        const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
-        const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
-        const isMetaAd = Boolean(lead.referral || (lead.source && (lead.source.toLowerCase().includes('meta') || lead.source.toLowerCase().includes('ad'))));
-        const source = isMetaAd ? 'Meta Ads' : (lead.source || lead.platform || 'Direct WhatsApp');
-        const notesList = getLeadNotesList(lead);
-        const leadNotesStr = notesList.map(n => `[${n.authorName || 'Agent'} - ${formatFullDateTime(n.createdAt)}]: ${n.text}`).join('\n') || (typeof lead.notes === 'string' ? lead.notes : '');
-
-        const statusRaw = (lead.status || 'new').toLowerCase();
-        const statusMap = {
-          'new': 'New',
-          'contacted': 'Contacted',
-          'no_answer': 'No Answer',
-          'follow_up': 'Follow Up',
-          'converted': 'Converted',
-          'lost': 'Lost',
-          'deleted': 'Deleted'
-        };
-        const status = statusMap[statusRaw] || statusRaw.toUpperCase();
-        const createdDate = formatFullDateTime(lead.createdAt || lead.lastMessageAt);
-
-        worksheet.addRow({
-          name: displayName,
-          phone: phone,
-          query: userFirstQuery,
-          source: source,
-          assigned: lead.assigneeName || 'Unassigned',
-          branch: lead.branch || 'Unassigned',
-          status: status,
-          notes: leadNotesStr,
-          created: createdDate
-        });
+      leadsToExport.forEach((lead, idx) => {
+        const row = buildExportRow(lead);
+        worksheet.addRow({ ...row, sno: idx + 1 });
       });
 
       // Style Header Row (Row 1): Royal Blue background (#1D4ED8) with Bold White Text (#FFFFFF)
@@ -231,17 +209,17 @@ export async function exportLeadsToExcel(leadsToExport) {
             right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
           };
 
-          if (colNumber === 1 || colNumber === 2 || colNumber === 3 || colNumber === 8) {
-            cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: colNumber === 3 || colNumber === 8 };
+          if (colNumber === 2 || colNumber === 3) {
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
           } else {
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
           }
 
-          if (colNumber === 1) {
+          if (colNumber === 2) {
             cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
           }
 
-          if (colNumber === 2) {
+          if (colNumber === 3) {
             cell.numFmt = '@';
           }
         });
@@ -256,7 +234,8 @@ export async function exportLeadsToExcel(leadsToExport) {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      showToast(`Exported ${leadsToExport.length} leads to Excel!`, "info");
       return;
     } catch (err) {
       console.warn("ExcelJS Export failed, using rich HTML table fallback:", err);
@@ -264,7 +243,7 @@ export async function exportLeadsToExcel(leadsToExport) {
   }
 
   // Fallback HTML XML format
-  const headers = ["Name", "Phone number", "User Query", "Source", "Assigned", "Branch", "Status", "Notes", "Created Date"];
+  const headers = ["S.No.", "Name", "Phone number", "Source", "Assigned", "Branch", "Status", "Created Date", "Last Message Date"];
   let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
@@ -286,29 +265,18 @@ export async function exportLeadsToExcel(leadsToExport) {
 
   html += `</tr></thead><tbody>`;
 
-  leadsToExport.forEach(lead => {
-    const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
-    const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
-    const phone = formatDisplayPhone(lead.phone || lead.id);
-    const isMetaAd = Boolean(lead.referral || (lead.source && (lead.source.toLowerCase().includes('meta') || lead.source.toLowerCase().includes('ad'))));
-    const source = isMetaAd ? 'Meta Ads' : (lead.source || lead.platform || 'Direct WhatsApp');
-    const statusRaw = (lead.status || 'new').toLowerCase();
-    const statusMap = { 'new': 'New', 'contacted': 'Contacted', 'no_answer': 'No Answer', 'follow_up': 'Follow Up', 'converted': 'Converted', 'lost': 'Lost', 'deleted': 'Deleted' };
-    const status = statusMap[statusRaw] || statusRaw.toUpperCase();
-    const notesList = getLeadNotesList(lead);
-    const leadNotesStr = notesList.map(n => `[${n.authorName || 'Agent'} - ${formatFullDateTime(n.createdAt)}]: ${n.text}`).join('<br/>') || (typeof lead.notes === 'string' ? lead.notes : '');
-    const createdDate = formatFullDateTime(lead.createdAt || lead.lastMessageAt);
-
+  leadsToExport.forEach((lead, idx) => {
+    const row = buildExportRow(lead);
     html += `<tr>
-      <td style="font-weight: 600; text-align: left;">${escapeHtml(displayName)}</td>
-      <td style="mso-number-format:'\\@'; text-align: left;">${escapeHtml(phone)}</td>
-      <td style="text-align: left;">${escapeHtml(userFirstQuery)}</td>
-      <td style="text-align: center;"><span style="color: #15803d; font-weight: 600;">${escapeHtml(source)}</span></td>
-      <td style="text-align: center;">${escapeHtml(lead.assigneeName || 'Unassigned')}</td>
-      <td style="text-align: center;">${escapeHtml(lead.branch || 'Unassigned')}</td>
-      <td style="text-align: center;"><span style="font-weight: 600;">${escapeHtml(status)}</span></td>
-      <td style="text-align: left;">${leadNotesStr}</td>
-      <td style="text-align: center;">${escapeHtml(createdDate)}</td>
+      <td style="text-align: center;">${idx + 1}</td>
+      <td style="font-weight: 600; text-align: left;">${escapeHtml(row.name)}</td>
+      <td style="mso-number-format:'\\@'; text-align: left;">${escapeHtml(row.phone)}</td>
+      <td style="text-align: center;"><span style="color: #15803d; font-weight: 600;">${escapeHtml(row.source)}</span></td>
+      <td style="text-align: center;">${escapeHtml(row.assigned)}</td>
+      <td style="text-align: center;">${escapeHtml(row.branch)}</td>
+      <td style="text-align: center;"><span style="font-weight: 600;">${escapeHtml(row.status)}</span></td>
+      <td style="text-align: center;">${escapeHtml(row.created)}</td>
+      <td style="text-align: center;">${escapeHtml(row.lastMessage)}</td>
     </tr>`;
   });
 
@@ -321,8 +289,37 @@ export async function exportLeadsToExcel(leadsToExport) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 
   showToast(`Exported ${leadsToExport.length} leads to Excel!`, "info");
+}
+
+const EXPORT_STATUS_LABELS = {
+  'new': 'New',
+  'contacted': 'Contacted',
+  'no_answer': 'No Answer',
+  'follow_up': 'Follow Up',
+  'converted': 'Converted',
+  'lost': 'Lost',
+  'deleted': 'Deleted'
+};
+
+function buildExportRow(lead) {
+  const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
+  const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
+  const isMetaAd = Boolean(lead.referral || (lead.source && (lead.source.toLowerCase().includes('meta') || lead.source.toLowerCase().includes('ad'))));
+  const statusRaw = (lead.status || 'new').toLowerCase();
+
+  return {
+    name: displayName,
+    phone: formatDisplayPhone(lead.phone || lead.id),
+    source: isMetaAd ? 'Meta Ads' : (lead.source || lead.platform || 'Direct WhatsApp'),
+    assigned: getEffectiveAssigneeId(lead) ? (lead.assigneeName || 'Unassigned') : 'Unassigned',
+    branch: lead.branch || 'Unassigned',
+    status: EXPORT_STATUS_LABELS[statusRaw] || statusRaw.toUpperCase(),
+    created: formatFullDateTime(lead.createdAt || lead.lastMessageAt),
+    lastMessage: hasWhatsAppConversation(lead) ? formatFullDateTime(lead.lastMessageAt) : '-'
+  };
 }
 
 export function getUserFirstQuery(lead) {

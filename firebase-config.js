@@ -216,8 +216,8 @@ export function subscribeToLeads(onUpdate, onError) {
 
       // Sort client-side by newest first
       leads.sort((a, b) => {
-        const timeA = new Date(a.lastMessageAt || a.createdAt || 0).getTime();
-        const timeB = new Date(b.lastMessageAt || b.createdAt || 0).getTime();
+        const timeA = getComparableTime(a.lastMessageAt || a.createdAt);
+        const timeB = getComparableTime(b.lastMessageAt || b.createdAt);
         return timeB - timeA;
       });
 
@@ -585,24 +585,6 @@ export async function updateLeadNotes(leadId, notes) {
     notes: notes || [],
     latestNote: latestNote,
     noteUpdatedAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
-}
-
-/**
- * Update custom fields array on a lead document in Firestore
- * @param {string} leadId
- * @param {Array} customFields Array of { id, title, type, value, checked, createdAt, createdBy }
- */
-export async function updateLeadCustomFields(leadId, customFields) {
-  if (!db || !leadId) {
-    throw new Error("Firestore is not connected");
-  }
-
-  console.log(`🏷️ [Firestore] Updating custom fields for lead [${leadId}] (${customFields?.length || 0} fields)`);
-  const leadRef = doc(db, 'leads', leadId);
-  await updateDoc(leadRef, {
-    customFields: Array.isArray(customFields) ? customFields : [],
     updatedAt: serverTimestamp()
   });
 }

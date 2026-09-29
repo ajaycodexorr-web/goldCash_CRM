@@ -10,35 +10,6 @@ export const DEMO_LEADS = [
     handle: "maya.lin.design",
     phone: "+91 98765 43210",
     status: "new",
-    customFields: [
-      {
-        id: "cf_demo_1",
-        title: "Gold Karat",
-        type: "text",
-        value: "22 Karat",
-        checked: false,
-        createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-        createdBy: "Admin User"
-      },
-      {
-        id: "cf_demo_2",
-        title: "Client Tier",
-        type: "chip",
-        value: "VIP Customer",
-        checked: false,
-        createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-        createdBy: "Admin User"
-      },
-      {
-        id: "cf_demo_3",
-        title: "KYC Verified",
-        type: "check",
-        value: "Checked",
-        checked: true,
-        createdAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
-        createdBy: "Super Admin"
-      }
-    ],
     notes: [
       {
         id: "note_101",

@@ -22,9 +22,16 @@
 
   <link rel="stylesheet" href="styles.css">
 
-  <!-- Initial Auth State: Starts at secure Login Screen -->
+  <!-- Initial Auth State: show the app straight away when a saved session exists
+       (Firebase Auth still verifies it and falls back to the Login Screen if invalid) -->
   <script>
-    document.documentElement.className = 'is-unauthenticated';
+    (function () {
+      var hasSession = false;
+      try {
+        hasSession = !!(sessionStorage.getItem('crm_auth_session_v1') || localStorage.getItem('crm_auth_session_v1'));
+      } catch (e) {}
+      document.documentElement.className = hasSession ? 'is-authenticated' : 'is-unauthenticated';
+    })();
   </script>
   <style>
     /* Zero-Flash Instant View Switching */
@@ -488,15 +495,15 @@
             <div class="leads-table-scroll-wrapper">
               <!-- Table Header Row (Matching User Screenshot) -->
               <div class="leads-table-header">
+                <div class="col-header col-sno">S.No.</div>
                 <div class="col-header col-name">Name</div>
                 <div class="col-header col-phone">Phone number</div>
-                <div class="col-header col-query">User Query</div>
                 <div class="col-header col-platform">Source</div>
                 <div class="col-header col-assignee">Assigned</div>
                 <div class="col-header col-branch">Branch</div>
                 <div class="col-header col-status">Status</div>
-                <div class="col-header col-notes">Notes</div>
                 <div class="col-header col-date">Created Date</div>
+                <div class="col-header col-date">Last Message Date</div>
                 <div class="col-header col-actions">Action</div>
               </div>
 
@@ -520,8 +527,19 @@
 
             <!-- Leads Pagination Footer Bar -->
             <div class="pagination-bar" id="leadsPaginationBar" style="display: flex;">
-              <div class="pagination-info">
-                Showing page <strong id="leadsCurrentPageNum">1</strong> of <strong id="leadsTotalPagesNum">1</strong> (<span id="leadsTotalRecordsNum">0</span> total leads)
+              <div class="pagination-left">
+                <div class="pagination-info">
+                  Showing page <strong id="leadsCurrentPageNum">1</strong> of <strong id="leadsTotalPagesNum">1</strong> (<span id="leadsTotalRecordsNum">0</span> total leads)
+                </div>
+                <label class="page-size-control" for="leadsPageSizeSelect">
+                  Rows per page
+                  <select id="leadsPageSizeSelect" class="page-size-select">
+                    <option value="10" selected>10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </label>
               </div>
               <div class="pagination-controls">
                 <button type="button" class="btn-page-step" id="leadsPrevBtn" disabled>
@@ -815,81 +833,6 @@
                   </button>
                 </div>
               </form>
-            </div>
-
-            <!-- Custom Fields Section (Add Field & Listing) -->
-            <div class="contact-custom-fields-box" id="contactCustomFieldsBox">
-              <div class="custom-fields-header">
-                <div class="custom-fields-title">
-                  <i class="fa-solid fa-shapes"></i> Custom Fields
-                  <span class="custom-fields-count-badge" id="contactFieldsCountBadge">0</span>
-                </div>
-                <button type="button" id="toggleAddFieldBtn" class="btn-toggle-add-field" title="Add a new custom field">
-                  <i class="fa-solid fa-plus"></i> Add Field
-                </button>
-              </div>
-
-              <!-- Inline Add Field Form (Expandable) -->
-              <form id="contactAddFieldForm" class="contact-add-field-form" style="display: none;">
-                <input type="hidden" id="customFieldEditingId" value="" />
-                <div class="add-field-form-title" id="customFieldFormHeading" style="display: none;">
-                  <i class="fa-solid fa-pen-to-square"></i> Edit Custom Field
-                </div>
-                <div class="form-group-field">
-                  <label for="customFieldTitleInput" class="field-input-label">Field Title <span class="required-star">*</span></label>
-                  <input type="text" id="customFieldTitleInput" class="custom-field-input" placeholder="e.g., Gold Karat, KYC Verified, Tier..." required autocomplete="off" />
-                </div>
-
-                <div class="form-group-field">
-                  <label class="field-input-label">Field Type</label>
-                  <div class="field-type-segmented-control" id="customFieldTypeControl">
-                    <button type="button" class="type-segment-btn active" data-type="text">
-                      <i class="fa-solid fa-font"></i> Text
-                    </button>
-                    <button type="button" class="type-segment-btn" data-type="chip">
-                      <i class="fa-solid fa-tags"></i> Chip
-                    </button>
-                    <button type="button" class="type-segment-btn" data-type="check">
-                      <i class="fa-regular fa-square-check"></i> Check
-                    </button>
-                  </div>
-                  <input type="hidden" id="customFieldSelectedType" value="text" />
-                </div>
-
-                <!-- Dynamic Value Input for Text and Chip -->
-                <div class="form-group-field" id="customFieldValueGroup">
-                  <label for="customFieldValueInput" class="field-input-label" id="customFieldValueLabel">Field Value <span class="required-star">*</span></label>
-                  <input type="text" id="customFieldValueInput" class="custom-field-input" placeholder="Enter value (e.g. 22 Karat, 15 grams)..." required autocomplete="off" />
-                </div>
-
-                <!-- Check Type Initial Toggle (Shown only when type=check) -->
-                <div class="form-group-field" id="customFieldCheckGroup" style="display: none;">
-                  <label class="field-input-label">Initial Status</label>
-                  <label class="custom-check-toggle-label">
-                    <input type="checkbox" id="customFieldCheckInput" class="custom-field-checkbox" />
-                    <span class="custom-check-slider"></span>
-                    <span class="custom-check-text" id="customCheckStatusText">Unchecked</span>
-                  </label>
-                </div>
-
-                <div class="add-field-actions">
-                  <button type="button" id="cancelAddFieldBtn" class="btn-cancel-field">Cancel</button>
-                  <button type="submit" id="saveCustomFieldSubmitBtn" class="btn-submit-field">
-                    <i class="fa-solid fa-check"></i> Save Field
-                  </button>
-                </div>
-              </form>
-
-              <!-- Custom Fields Empty State -->
-              <div class="contact-empty-fields" id="contactDetailsEmptyFields" style="display: none;">
-                <i class="fa-solid fa-layer-group"></i>
-                <p>No custom fields added yet.</p>
-              </div>
-
-              <!-- Custom Fields Listing Feed -->
-              <div class="contact-custom-fields-list" id="contactDetailsCustomFieldsList">
-                <!-- Rendered dynamically by JS -->
-              </div>
             </div>
 
             <!-- Notes History Listing Feed -->

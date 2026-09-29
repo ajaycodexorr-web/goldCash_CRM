@@ -7,10 +7,9 @@ import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { escapeHtml, getInitials, formatFullDateTime, formatRelativeTime, normalizePhone, formatDisplayPhone, getLeadNotesList, getLatestLeadNote, parseDate, hasWhatsAppConversation } from '../utils/formatters.js';
 import { showToast } from '../utils/notifications.js';
-import { getUserFirstQuery } from '../utils/export-excel.js';
 import { addAuditLog } from '../services/logging-service.js';
 import { checkUserDisabledAndEnforceLogout } from '../services/auth-service.js';
-import { hasPermission } from '../services/user-service.js';
+import { hasPermission, getAssignableTeamMembers, getEffectiveAssigneeId } from '../services/user-service.js';
 import { resetToAllTime } from './date-range-picker.js';
 
 export const STATUS_CONFIG = {
@@ -123,7 +122,30 @@ function filterBranchDropdownListItems(query) {
   });
 }
 
+const LEADS_PAGE_SIZE_KEY = 'crm_leads_page_size_v1';
+const LEADS_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
 export function setupLeadsHandlers(renderConversationsView, openLeadChat, renderLeadsView) {
+  // Rows per page selector (10 / 25 / 50 / 100)
+  const pageSizeSelect = document.getElementById('leadsPageSizeSelect');
+  if (pageSizeSelect) {
+    try {
+      const savedSize = parseInt(localStorage.getItem(LEADS_PAGE_SIZE_KEY), 10);
+      if (LEADS_PAGE_SIZE_OPTIONS.includes(savedSize)) state.leadsPageSize = savedSize;
+    } catch (e) {}
+    pageSizeSelect.value = String(state.leadsPageSize || 10);
+
+    pageSizeSelect.addEventListener('change', (e) => {
+      const size = parseInt(e.target.value, 10);
+      state.leadsPageSize = LEADS_PAGE_SIZE_OPTIONS.includes(size) ? size : 10;
+      state.leadsCurrentPage = 1;
+      try {
+        localStorage.setItem(LEADS_PAGE_SIZE_KEY, String(state.leadsPageSize));
+      } catch (e) {}
+      renderLeadsView(renderConversationsView, openLeadChat);
+    });
+  }
+
   // Search input
   if (elements.leadsSearchInput) {
     elements.leadsSearchInput.addEventListener('input', (e) => {
@@ -579,7 +601,7 @@ function populateLeadAssigneeOptions() {
   const assigneeSelect = document.getElementById('newLeadAssignee');
   if (!assigneeSelect) return;
 
-  const teamMembers = state.teamMembers || [];
+  const teamMembers = getAssignableTeamMembers();
   assigneeSelect.innerHTML = `
     <option value="" selected>Unassigned</option>
     ${teamMembers.map(user => `
@@ -680,6 +702,13 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
 
     return matchesSearch && matchesFilter && matchesDate && matchesBranch;
   });
+
+  // Latest last message first
+  const lastMessageTime = (lead) => {
+    const d = parseDate(lead.lastMessageAt || lead.updatedAt || lead.createdAt);
+    return d ? d.getTime() : 0;
+  };
+  filtered.sort((a, b) => lastMessageTime(b) - lastMessageTime(a));
 
   // Update counters
   const activeCount = activeLeadsOnly.length;
@@ -794,7 +823,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
 
   if (!elements.leadsCardsList) return;
 
-  // Pagination Calculations (10 records per page)
+  // Pagination Calculations (user-selected rows per page, default 10)
   const pageSize = state.leadsPageSize || 10;
   const totalRecords = filtered.length;
   const totalPages = Math.ceil(totalRecords / pageSize) || 1;
@@ -806,27 +835,25 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
   const pageRecords = filtered.slice(startIndex, startIndex + pageSize);
 
   // Render Lead Cards matching UI design
-  elements.leadsCardsList.innerHTML = pageRecords.map(lead => {
+  elements.leadsCardsList.innerHTML = pageRecords.map((lead, rowIdx) => {
     const rawDisplay = lead.name && lead.name.trim() ? lead.name.trim() : (lead.phone || lead.id);
     const displayName = (/^\+?\d[\d\s\-()]+$/.test(rawDisplay)) ? formatDisplayPhone(rawDisplay) : rawDisplay;
     const subtitle = lead.company || '';
     const handle = formatDisplayPhone(lead.handle || lead.phone || lead.id);
-    const userFirstQuery = getUserFirstQuery(lead);
     const hasChat = hasWhatsAppConversation(lead);
     const createdDateTime = formatFullDateTime(lead.createdAt || lead.lastMessageAt);
+    const lastMessageDateTime = hasChat ? formatFullDateTime(lead.lastMessageAt) : '-';
+    const serialNumber = startIndex + rowIdx + 1;
     const currentStatus = (lead.status || 'new').toLowerCase();
     const isDeleted = currentStatus === 'deleted';
-    const currentAssigneeId = lead.assigneeId || '';
-    const currentAssigneeName = lead.assigneeName || 'Unassigned';
-    const notesList = getLeadNotesList(lead);
-    const latestNote = getLatestLeadNote(lead);
-    const latestNoteText = latestNote ? latestNote.text : '';
-    const latestAuthor = latestNote ? latestNote.authorName || 'Agent' : '';
-    const latestTime = latestNote ? formatRelativeTime(latestNote.createdAt) : '';
-    const noteTooltip = latestNote ? `Latest by ${latestAuthor} (${latestTime}):\n${latestNoteText}` : 'Click to view note history & add note';
+    const currentAssigneeId = getEffectiveAssigneeId(lead);
+    const currentAssigneeName = currentAssigneeId ? (lead.assigneeName || 'Unassigned') : 'Unassigned';
 
     return `
       <div class="lead-card-row ${isDisabledUser ? 'row-disabled' : ''}" data-lead-id="${escapeHtml(lead.id)}">
+        <!-- S.No. -->
+        <div class="lead-sno-col">${serialNumber}</div>
+
         <!-- 1. Name -->
         <div class="lead-profile-col" style="${hasChat ? 'cursor: pointer;' : 'cursor: default;'}" title="${hasChat ? `Open chat with ${escapeHtml(displayName)}` : escapeHtml(displayName)}">
           <div class="lead-name-box">
@@ -838,13 +865,6 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
         <!-- 2. Phone number -->
         <div class="lead-handle-col">
           <span>${escapeHtml(handle)}</span>
-        </div>
-
-        <!-- 3. User Query -->
-        <div class="lead-message-col" style="${hasChat ? 'cursor: pointer;' : 'cursor: default;'}" title="${hasChat ? `Open chat with ${escapeHtml(displayName)}` : ''}">
-          <div class="lead-quote-bubble ${!hasChat ? 'bubble-no-chat' : ''}" title="${escapeHtml(userFirstQuery)}">
-            ${escapeHtml(userFirstQuery)}
-          </div>
         </div>
 
         <!-- 4. Source -->
@@ -865,7 +885,7 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
           ` : `
             <select class="lead-assignee-select" data-lead-id="${escapeHtml(lead.id)}" ${isDisabledUser ? 'disabled' : ''}>
               <option value="" ${!currentAssigneeId ? 'selected' : ''}>Unassigned</option>
-              ${teamMembers.map(user => `
+              ${getAssignableTeamMembers().map(user => `
                 <option value="${user.id}" ${currentAssigneeId === user.id ? 'selected' : ''}>
                   ${user.role === 'admin' ? '🛡️' : '👤'} ${escapeHtml(user.name)}
                 </option>
@@ -908,31 +928,14 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
           `}
         </div>
 
-        <!-- 8. Notes -->
-        <div class="lead-notes-col">
-          ${isDeleted ? `
-            <div class="lead-note-badge static-deleted-note" title="${escapeHtml(noteTooltip)}">
-              <i class="fa-regular fa-note-sticky note-icon"></i>
-              <span class="note-text">${escapeHtml(latestNoteText || 'No notes')}</span>
-              ${notesList.length > 1 ? `<span class="note-count-pill" title="${notesList.length} total notes">${notesList.length}</span>` : ''}
-            </div>
-          ` : `
-            <div class="lead-note-badge ${latestNoteText ? 'has-note' : 'no-note'}" data-lead-id="${escapeHtml(lead.id)}" title="${escapeHtml(noteTooltip)}">
-              <i class="fa-regular fa-note-sticky note-icon"></i>
-              <span class="note-text">${escapeHtml(latestNoteText || (hasPermission('canAddNote') ? '+ Add note' : 'No notes'))}</span>
-              ${notesList.length > 1 ? `<span class="note-count-pill" title="${notesList.length} total notes">${notesList.length}</span>` : ''}
-              ${hasPermission('canAddNote') ? `
-                <button type="button" class="btn-note-edit" data-lead-id="${escapeHtml(lead.id)}" title="View notes history & add note">
-                  <i class="fa-solid fa-pen"></i>
-                </button>
-              ` : ''}
-            </div>
-          `}
-        </div>
-
         <!-- 9. Created Date with Time -->
         <div class="lead-time-col">
           <span>${createdDateTime}</span>
+        </div>
+
+        <!-- Last Message Date with Time -->
+        <div class="lead-time-col">
+          <span>${lastMessageDateTime}</span>
         </div>
 
         ${isDeletedFilter ? '' : `
@@ -966,17 +969,8 @@ export function renderLeadsView(renderConversationsView, openLeadChat) {
     });
   });
 
-  // Note Badge Click Listeners
-  elements.leadsCardsList.querySelectorAll('.lead-note-badge:not(.static-deleted-note)').forEach(badge => {
-    badge.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const leadId = badge.dataset.leadId;
-      openLeadNotesModal(leadId, renderLeadsView, renderConversationsView, openLeadChat);
-    });
-  });
-
-  // Row Profile / Query Click to open chat (only if lead has WhatsApp conversation)
-  elements.leadsCardsList.querySelectorAll('.lead-profile-col, .lead-message-col').forEach(col => {
+  // Row Name Click to open chat (only if lead has WhatsApp conversation)
+  elements.leadsCardsList.querySelectorAll('.lead-profile-col').forEach(col => {
     col.addEventListener('click', (e) => {
       e.stopPropagation();
       const row = col.closest('.lead-card-row');

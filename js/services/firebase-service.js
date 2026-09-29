@@ -2,7 +2,7 @@
  * Firebase Connection & Real-Time Firestore Synchronization Service
  */
 
-import { initializeFirebase, subscribeToLeads, subscribeToActivityLogs, subscribeToUsers, subscribeToRoles, fetchFirstUserMessage } from '../../firebase-config.js';
+import { initializeFirebase, subscribeToLeads, subscribeToActivityLogs, subscribeToUsers, subscribeToRoles, fetchFirstUserMessage, updateLeadAssignee } from '../../firebase-config.js';
 import { state } from '../state/app-state.js';
 import { elements } from '../dom/elements.js';
 import { DEMO_LEADS } from '../constants/demo-data.js';
@@ -11,11 +11,34 @@ import { addLeadNotification, initLeadNotifications } from '../components/notifi
 import { addAuditLog, saveLogsToLocalStorage, updateLogsBadge } from './logging-service.js';
 import { normalizePhone } from '../utils/formatters.js';
 
-import { syncAllUsersToFirestore, saveTeamMembers, syncRolesFromFirestore } from './user-service.js';
+import { syncAllUsersToFirestore, saveTeamMembers, syncRolesFromFirestore, isAssignableUser } from './user-service.js';
+import { SUPER_ADMIN_IDS } from '../constants/super-admins.js';
 import { logoutUser } from './auth-service.js';
 import { updateComposerDisabledState } from '../components/composer.js';
 
 let connectionTimeoutTimer = null;
+const unassignAttemptedLeadIds = new Set();
+
+/**
+ * One-time data cleanup: leads owned by a Super Admin are reset to Unassigned in Firestore.
+ * Only runs for a signed-in Super Admin; each lead is attempted once per session.
+ */
+function unassignSuperAdminLeads(leadsList) {
+  if (state.demoMode || !state.currentUser || state.currentUser.role !== 'super_admin') return;
+
+  const superAdminIds = new Set(SUPER_ADMIN_IDS);
+  (state.teamMembers || []).forEach(u => {
+    if (!isAssignableUser(u)) superAdminIds.add(u.id);
+  });
+
+  leadsList.forEach(lead => {
+    if (!lead.assigneeId || !superAdminIds.has(lead.assigneeId) || unassignAttemptedLeadIds.has(lead.id)) return;
+    unassignAttemptedLeadIds.add(lead.id);
+    updateLeadAssignee(lead.id, null, 'Unassigned').catch(err => {
+      console.warn(`Could not unassign Super Admin from lead ${lead.id}:`, err);
+    });
+  });
+}
 
 export function updateConnectionStatus(status) {
   state.connectionStatus = status;
@@ -297,6 +320,7 @@ function startRealtimeSync(renderLeadsView, renderConversationsView, renderLogsV
       });
 
       state.leads = Array.from(deduplicatedMap.values());
+      unassignSuperAdminLeads(leadsList);
       if (renderLeadsView) renderLeadsView();
       if (renderConversationsView) renderConversationsView();
 

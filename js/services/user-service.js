@@ -249,6 +249,28 @@ export function hasPermission(permissionKey, user = state.currentUser) {
   return perms[permissionKey] === true;
 }
 
+/**
+ * Whether a user can own leads (team members only, never Super Admins)
+ */
+export function isAssignableUser(user) {
+  return !!user && user.role !== 'super_admin' && user.role !== 'admin' && !isSuperAdminEmail(user.email);
+}
+
+/**
+ * Team members a lead can be assigned to (excludes Super Admins)
+ */
+export function getAssignableTeamMembers() {
+  return (state.teamMembers || []).filter(isAssignableUser);
+}
+
+/**
+ * Lead's assignee id, or '' when unassigned or assigned to a non-member (e.g. Super Admin)
+ */
+export function getEffectiveAssigneeId(lead) {
+  const id = (lead && lead.assigneeId) || '';
+  return id && getAssignableTeamMembers().some(u => u.id === id) ? id : '';
+}
+
 // ==========================================================================
 // Team Members Storage & Sync
 // ==========================================================================

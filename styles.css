@@ -770,17 +770,6 @@ html, body {
   color: #dc2626;
 }
 
-.lead-note-badge.static-deleted-note {
-  cursor: default;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #64748b;
-}
-
-.lead-note-badge.static-deleted-note .note-icon {
-  color: #94a3b8;
-}
-
 /* Team, Settings & Roles Dashboard Container & Cards */
 .team-dashboard-container,
 .settings-dashboard-container,
@@ -2051,6 +2040,13 @@ html, body {
   box-sizing: border-box;
 }
 
+.leads-table-header .col-sno {
+  flex: 0 0 50px;
+  width: 50px;
+  min-width: 50px;
+  max-width: 50px;
+}
+
 .leads-table-header .col-name {
   flex: 0 0 140px;
   width: 140px;
@@ -2064,14 +2060,6 @@ html, body {
   min-width: 130px;
   max-width: 130px;
 }
-
-.leads-table-header .col-query {
-  flex: 0 0 220px;
-  width: 220px;
-  min-width: 220px;
-  max-width: 220px;
-}
-
 .leads-table-header .col-platform {
   flex: 0 0 110px;
   width: 110px;
@@ -2099,14 +2087,6 @@ html, body {
   min-width: 130px;
   max-width: 130px;
 }
-
-.leads-table-header .col-notes {
-  flex: 0 0 160px;
-  width: 160px;
-  min-width: 160px;
-  max-width: 160px;
-}
-
 .leads-table-header .col-date {
   flex: 0 0 160px;
   width: 160px;
@@ -2154,6 +2134,17 @@ html, body {
 
 .lead-card-row:hover {
   background-color: #f8fafc;
+}
+
+/* Serial Number Column */
+.lead-sno-col {
+  flex: 0 0 50px;
+  width: 50px;
+  min-width: 50px;
+  max-width: 50px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 /* Lead Profile / Avatar Column */
@@ -2240,14 +2231,6 @@ html, body {
   text-overflow: ellipsis;
 }
 
-/* Message Quote Preview Column */
-.lead-message-col {
-  flex: 0 0 220px;
-  width: 220px;
-  min-width: 220px;
-  max-width: 220px;
-}
-
 /* Channel Pill Column */
 .lead-channel-col {
   flex: 0 0 110px;
@@ -2331,34 +2314,6 @@ html, body {
   color: #be185d;
   border-color: #fbcfe8;
 }
-
-.lead-quote-bubble {
-  width: 100%;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 5px 10px;
-  font-size: 12px;
-  line-height: 1.35;
-  color: #334155;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: normal;
-  word-break: break-word;
-  max-height: 42px;
-}
-
-.lead-quote-bubble.bubble-no-chat {
-  color: #94a3b8;
-  background-color: #fafaf9;
-  border-color: #f1f5f9;
-  font-weight: 500;
-  cursor: default;
-}
-
 /* Status Selector Dropdown Column */
 .lead-status-col {
   flex: 0 0 130px;
@@ -2460,96 +2415,6 @@ html, body {
 }
 .lead-status-select.status-deleted:hover {
   background-color: #fee2e2;
-}
-
-/* Notes Column */
-.lead-notes-col {
-  flex: 0 0 160px;
-  width: 160px;
-  display: flex;
-  align-items: center;
-}
-
-.lead-note-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
-  width: 100%;
-  box-sizing: border-box;
-  transition: all 0.15s ease;
-  border: 1px solid transparent;
-  user-select: none;
-}
-
-.lead-note-badge.no-note {
-  background-color: #faf6f0;
-  border-color: var(--border-color);
-  color: #a8a29e;
-  font-style: italic;
-}
-
-.lead-note-badge.no-note:hover {
-  background-color: var(--crm-primary-light);
-  border-color: var(--crm-primary-border);
-  color: var(--crm-primary);
-  font-style: normal;
-}
-
-.lead-note-badge.has-note {
-  background-color: #fffbeb;
-  border-color: #fef3c7;
-  color: #92400e;
-}
-
-.lead-note-badge.has-note:hover {
-  background-color: #fef3c7;
-  border-color: #fde68a;
-}
-
-.lead-note-badge .note-icon {
-  font-size: 11.5px;
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-.lead-note-badge .note-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  font-weight: 500;
-}
-
-.lead-note-badge .note-count-pill {
-  font-size: 10px;
-  font-weight: 700;
-  background-color: #fde68a;
-  color: #78350f;
-  padding: 1px 5px;
-  border-radius: 10px;
-  margin-left: 2px;
-}
-
-.lead-note-badge .btn-note-edit {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  color: inherit;
-  opacity: 0.5;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  display: flex;
-  align-items: center;
-  font-size: 10.5px;
-}
-
-.lead-note-badge:hover .btn-note-edit {
-  opacity: 1;
-  transform: scale(1.1);
 }
 
 /* Notes History List in Modal */
@@ -3005,10 +2870,20 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 2px;
 }
 
+.conv-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
 .conv-name {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-main);
@@ -3020,9 +2895,13 @@ html, body {
 .conv-time {
   font-size: 11px;
   color: var(--text-light);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .conv-snippet {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
@@ -3037,7 +2916,9 @@ html, body {
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 99px;
-  margin-left: 6px;
+  flex-shrink: 0;
+  min-width: 18px;
+  text-align: center;
 }
 
 /* Badges & Direction Indicators in Conversations List Item */
@@ -5255,6 +5136,39 @@ html, body {
   color: var(--text-muted);
 }
 
+.pagination-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.page-size-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.page-size-select {
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: #ffffff;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.page-size-select:focus {
+  outline: none;
+  border-color: var(--crm-primary-border);
+}
+
 .pagination-info strong {
   color: var(--text-main);
 }
@@ -5912,403 +5826,6 @@ html, body {
   box-shadow: 0 3px 8px rgba(223, 133, 22, 0.3);
 }
 
-/* =========================================================
-   CONTACT DETAILS CUSTOM FIELDS (Text, Chip, Check)
-   ========================================================= */
-.contact-custom-fields-box {
-  background: #ffffff;
-  border: 1px solid #ede8e1;
-  border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
-  box-shadow: 0 2px 8px rgba(180, 140, 100, 0.07);
-}
-
-.custom-fields-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.custom-fields-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-main);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.custom-fields-count-badge {
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-}
-
-.btn-toggle-add-field {
-  background: linear-gradient(135deg, rgba(223, 133, 22, 0.08), rgba(223, 133, 22, 0.16));
-  color: var(--crm-primary, #df8516);
-  border: 1px solid rgba(223, 133, 22, 0.3);
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.15s ease;
-}
-
-.btn-toggle-add-field:hover {
-  background: var(--crm-primary);
-  color: #ffffff;
-  border-color: var(--crm-primary);
-  box-shadow: 0 2px 6px rgba(223, 133, 22, 0.25);
-}
-
-.contact-add-field-form {
-  background: #fdfbf7;
-  border: 1px dashed #e2d9cc;
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 10px;
-  animation: slideDownField 0.2s ease;
-}
-
-@keyframes slideDownField {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.form-group-field {
-  margin-bottom: 8px;
-}
-
-.field-input-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-  margin-bottom: 4px;
-  display: block;
-}
-
-.required-star {
-  color: #ef4444;
-}
-
-.custom-field-input {
-  width: 100%;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 7px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-family: inherit;
-  background: #ffffff;
-  box-sizing: border-box;
-  outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.custom-field-input:focus {
-  border-color: var(--crm-primary, #df8516);
-  box-shadow: 0 0 0 3px rgba(223, 133, 22, 0.15);
-}
-
-.field-type-segmented-control {
-  display: flex;
-  background: #e2e8f0;
-  padding: 2.5px;
-  border-radius: 8px;
-  gap: 2px;
-}
-
-.type-segment-btn {
-  flex: 1;
-  border: none;
-  background: transparent;
-  padding: 5px 8px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #64748b;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  transition: all 0.15s ease;
-}
-
-.type-segment-btn:hover {
-  color: #1e293b;
-}
-
-.type-segment-btn.active {
-  background: #ffffff;
-  color: var(--crm-primary, #df8516);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  font-weight: 700;
-}
-
-.custom-check-toggle-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-  background: #ffffff;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 7px;
-  padding: 6px 12px;
-  width: 100%;
-  box-sizing: border-box;
-  transition: border-color 0.2s ease;
-}
-
-.custom-check-toggle-label:hover {
-  border-color: var(--crm-primary, #df8516);
-}
-
-.custom-field-checkbox {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--crm-primary, #df8516);
-  cursor: pointer;
-}
-
-.custom-check-text {
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569;
-}
-
-.add-field-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.btn-cancel-field {
-  background: transparent;
-  border: 1px solid #cbd5e1;
-  color: #64748b;
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-cancel-field:hover {
-  background: #f1f5f9;
-  color: #334155;
-}
-
-.btn-submit-field {
-  background: var(--crm-primary, #df8516);
-  color: #ffffff;
-  border: none;
-  padding: 5px 14px;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  box-shadow: 0 1px 3px rgba(223, 133, 22, 0.25);
-  transition: all 0.15s ease;
-}
-
-.btn-submit-field:hover {
-  background: var(--crm-primary-hover, #c7710c);
-  transform: translateY(-1px);
-}
-
-.contact-empty-fields {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 14px 10px;
-  color: #94a3b8;
-  font-size: 11.5px;
-  text-align: center;
-  gap: 4px;
-}
-
-.contact-empty-fields i {
-  font-size: 20px;
-  opacity: 0.5;
-  margin-bottom: 2px;
-}
-
-.contact-custom-fields-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.custom-field-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 7px 10px;
-  transition: all 0.15s ease;
-}
-
-.custom-field-item:hover {
-  border-color: #cbd5e1;
-  background: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-}
-
-.custom-field-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.custom-field-title-badge {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.custom-field-type-icon {
-  font-size: 10px;
-  opacity: 0.7;
-}
-
-.custom-field-val-text {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-main);
-  word-break: break-word;
-}
-
-.custom-field-val-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
-  color: #92400e;
-  border: 1px solid #fcd34d;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 11.5px;
-  font-weight: 700;
-  width: fit-content;
-  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.1);
-}
-
-.custom-field-val-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  user-select: none;
-  padding: 3px 9px;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 700;
-  width: fit-content;
-  transition: all 0.15s ease;
-}
-
-.custom-field-val-check.checked {
-  color: #15803d;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-}
-
-.custom-field-val-check.checked:hover {
-  background: #dcfce7;
-}
-
-.custom-field-val-check.unchecked {
-  color: #64748b;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-}
-
-.custom-field-val-check.unchecked:hover {
-  background: #e2e8f0;
-}
-
-.add-field-form-title {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--crm-primary, #df8516);
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.custom-field-actions-wrap {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 8px;
-}
-
-.btn-edit-field {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  padding: 4px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 11.5px;
-  transition: all 0.15s ease;
-}
-
-.btn-edit-field:hover {
-  color: var(--crm-primary, #df8516);
-  background: rgba(223, 133, 22, 0.12);
-}
-
-.btn-delete-field {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  padding: 4px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s ease;
-}
-
-.btn-delete-field:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-}
-
 /* Notes Feed */
 .contact-notes-section {
   display: flex;
@@ -6411,12 +5928,32 @@ html, body {
   box-shadow: 0 1px 3px rgba(223, 133, 22, 0.25);
 }
 
+.note-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.note-card-header .note-card-author {
+  min-width: 0;
+}
+
+.note-card-header .note-author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .note-card-time {
   font-size: 10.5px;
   color: #94a3b8;
   display: flex;
   align-items: center;
   gap: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .note-card-text {
@@ -8176,6 +7713,11 @@ html, body {
   .pagination-info {
     font-size: 11.5px;
     text-align: center;
+  }
+
+  .pagination-left {
+    width: 100%;
+    justify-content: center;
   }
 
   .pagination-controls {
